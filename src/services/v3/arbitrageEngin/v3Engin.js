@@ -1679,32 +1679,62 @@ async function processDirectArbitragePool(poolName, prices) {
 
       // ✅ Step 2: Get ACTUAL quote for sell (tokenA -> tokenB) with error tracking
       let step2Output;
-      try {
-        const step2Fee = sellPriceObj.dex.includes('V3')
-          ? Math.floor(platformFee2.mul(1000000).toNumber())
-          : 3000;
+try {
+  const step2Fee = sellPriceObj.dex.includes('V3')
+    ? Math.floor(platformFee2.mul(1000000).toNumber())
+    : 3000;
 
-        step2Output = await getQuote(
-          sellPriceObj.dex,
-          step1Output,
-          buyPriceObj.tokenA.address,
-          buyPriceObj.tokenB.address,
-          step2Fee
-        );
+  // ✅ CRITICAL FIX: Use sellPriceObj instead of buyPriceObj
+  step2Output = await getQuote(
+    sellPriceObj.dex,
+    step1Output,
+    sellPriceObj.tokenA.address,  // ✅ FIXED: Correct token order
+    sellPriceObj.tokenB.address,  // ✅ FIXED: Correct token order
+    step2Fee
+  );
 
-        if (!step2Output || step2Output === 0n) {
-          throw new Error('Zero output from quote');
-        }
+  if (!step2Output || step2Output === 0n) {
+    throw new Error('Zero output from quote');
+  }
 
-        stats.step2Success++;
-      } catch (error) {
-        stats.step2Failed++;
-        const reason = error.reason || error.message || 'Unknown';
-        const shortReason = reason.substring(0, 50);
-        stats.step2FailReasons[shortReason] = (stats.step2FailReasons[shortReason] || 0) + 1;
-        console.log(`❌ Step2 fail (${pairIndex}): ${shortReason}`);
-        return null; // Skip this pair
-      }
+  stats.step2Success++;
+} catch (error) {
+  stats.step2Failed++;
+  const reason = error.reason || error.message || 'Unknown';
+  const shortReason = reason.substring(0, 50);
+  stats.step2FailReasons[shortReason] = (stats.step2FailReasons[shortReason] || 0) + 1;
+  console.log(`❌ Step2 fail (${pairIndex}): ${shortReason}`);
+  return null; // Skip this pair
+}
+      
+      
+      // let step2Output;
+      // try {
+      //   const step2Fee = sellPriceObj.dex.includes('V3')
+      //     ? Math.floor(platformFee2.mul(1000000).toNumber())
+      //     : 3000;
+
+      //   step2Output = await getQuote(
+      //     sellPriceObj.dex,
+      //     step1Output,
+      //     buyPriceObj.tokenA.address,
+      //     buyPriceObj.tokenB.address,
+      //     step2Fee
+      //   );
+
+      //   if (!step2Output || step2Output === 0n) {
+      //     throw new Error('Zero output from quote');
+      //   }
+
+      //   stats.step2Success++;
+      // } catch (error) {
+      //   stats.step2Failed++;
+      //   const reason = error.reason || error.message || 'Unknown';
+      //   const shortReason = reason.substring(0, 50);
+      //   stats.step2FailReasons[shortReason] = (stats.step2FailReasons[shortReason] || 0) + 1;
+      //   console.log(`❌ Step2 fail (${pairIndex}): ${shortReason}`);
+      //   return null; // Skip this pair
+      // }
 
       console.log('💰 Calculation Check:', {
         inputAmount: inputAmountWei,

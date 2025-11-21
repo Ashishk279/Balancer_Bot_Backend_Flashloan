@@ -12,7 +12,7 @@ import { MIN_TRADE_AMOUNTS, TOKEN_SYMBOLS } from '../config/index.js';
 
 const wsProvider = ws.getProvider();
 let flashbotExecutor = null;
-const httpProvider = new ethers.JsonRpcProvider('https://eth-mainnet.ws.alchemyapi.io/v2/xo70m5QSzeEkOivsSU3rd')
+const ws2Provider = new ethers.WebSocketProvider(process.env.WS_URL_2 || process.env.WS_URL);
 const EXECUTION_TIMEOUT = 60000; // 60 seconds timeout for transaction confirmation
 
 // Minimum trade amounts for profitability
@@ -34,8 +34,8 @@ async function getFlashbotExecutor() {
     return null;
   }
   try {
-    const wallet = new ethers.Wallet(privateKey, wsProvider);
-    flashbotExecutor = new FlashbotExecutor(wsProvider, wallet, {
+    const wallet = new ethers.Wallet(privateKey, ws2Provider);
+    flashbotExecutor = new FlashbotExecutor(ws2Provider, wallet, {
       contractAddress: process.env.ARBITRAGE_CONTRACT_ADDRESS,
       flashbotsRelay: process.env.FLASHBOTS_RELAY
     });
@@ -158,9 +158,9 @@ export async function executeOpportunities() {
       const FlashLoan = true
       let execution_payload;
       if (FlashLoan === true) {
-        execution_payload = await createFlashLoanPayload(opp, wsProvider);
+        execution_payload = await createFlashLoanPayload(opp, ws2Provider);
       } else {
-        execution_payload = await createDirectExecutionPayload(opp, wsProvider)
+        execution_payload = await createDirectExecutionPayload(opp, ws2Provider)
       }
 
 
@@ -214,12 +214,12 @@ export async function executeOpportunities() {
         if (execOpp.estimated_profit !== undefined) {
 
           if (FlashLoan) {
-             execute = await executeFlashLoanTransaction(execOpp, wsProvider, opp)
+             execute = await executeFlashLoanTransaction(execOpp, ws2Provider, opp)
             console.log("execute", execute)
           }
           else {
 
-           execute = await executeTransaction(execOpp, wsProvider)
+           execute = await executeTransaction(execOpp, ws2Provider)
 
             console.log("execute", execute)
           }

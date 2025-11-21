@@ -198,7 +198,7 @@ export async function executeOpportunities() {
 
         const profit = new Decimal(execOpp.estimated_profit || '0'); // Ensure Decimal is used here if needed
         if (profit.lessThan(new Decimal('0'))) {
-          logger.warn('Opportunity not profitable, skipping', { key, service: 'executionLayer' });
+          logger.warn('Opportunity not profitable, skipping', { key: opp.key, service: 'executionLayer' });
           continue;
         }
 
@@ -231,8 +231,8 @@ export async function executeOpportunities() {
         await completeOpportunity(opp.key, execute.success, execOpp);
 
         if (execute.success) {
-          // logger.info(Opportunity ${opp.key} executed successfully, { bundleHash: result.bundleHash, service: 'executionLayer' });
-          await completeOpportunity(opp.key, result.success, execOpp);
+          // logger.info(Opportunity ${opp.key} executed successfully, { bundleHash: execute.bundleHash, service: 'executionLayer' });
+          await completeOpportunity(opp.key, execute.success, execOpp);
         } else {
           logger.warn(`Opportunity ${opp.key} execution failed, { error: execute.error, service: 'executionLayer' }`);
         }
@@ -509,6 +509,16 @@ async function validateExecutionProfitability(opportunity, provider) {
       ? step2Quote.expectedAmountOut
       : BigInt(step2Quote.expectedAmountOut);
 
+    // Calculate actual profit (can be negative for loss)
+    const actualProfit = finalOutput - amountInBigInt;
+    const actualProfitPercent = (Number(actualProfit) * 100) / Number(amountInBigInt);
+
+    // Get gas price info for profitability calculations
+    const gasPrice = await provider.getFeeData();
+    const estimatedGas = 400000n;
+    const gasCostWei = estimatedGas * (gasPrice.maxFeePerGas || gasPrice.gasPrice || ethers.parseUnits('5', 'gwei'));
+    const minProfitRequired = gasCostWei * 3n; // 3x gas cost
+
     // ✅ CRITICAL CHECK: Ensure we don't lose money
     if (finalOutput <= amountInBigInt) {
       const loss = amountInBigInt - finalOutput;
@@ -524,12 +534,12 @@ Reason: Price changed between detection and execution
 Time Gap: ${opportunity.timestamp ? Date.now() - opportunity.timestamp : 'N/A'}ms
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       `);
-       opportunity.actualProfit = actualProfit.toString();
-    opportunity.actualProfitPercent = actualProfitPercent;
-    opportunity.gasCost = gasCostWei.toString();
-    opportunity.minProfitRequired = minProfitRequired.toString();
-    opportunity.gasPriceUsed = gasPrice.maxFeePerGas ? gasPrice.maxFeePerGas.toString() : (gasPrice.gasPrice ? gasPrice.gasPrice.toString() : ethers.parseUnits('5', 'gwei').toString());
-    await appendOpportunityToArrayFile(opportunity);
+      opportunity.actualProfit = actualProfit.toString();
+      opportunity.actualProfitPercent = actualProfitPercent;
+      opportunity.gasCost = gasCostWei.toString();
+      opportunity.minProfitRequired = minProfitRequired.toString();
+      opportunity.gasPriceUsed = gasPrice.maxFeePerGas ? gasPrice.maxFeePerGas.toString() : (gasPrice.gasPrice ? gasPrice.gasPrice.toString() : ethers.parseUnits('5', 'gwei').toString());
+      await appendOpportunityToArrayFile(opportunity);
       return {
         success: false,
         error: 'Opportunity became unprofitable',
@@ -538,16 +548,6 @@ Time Gap: ${opportunity.timestamp ? Date.now() - opportunity.timestamp : 'N/A'}m
         lossAmount: ethers.formatUnits(loss, step2TokenOutDecimals)
       };
     }
-
-    // Calculate actual profit
-    const actualProfit = finalOutput - amountInBigInt;
-    const actualProfitPercent = (Number(actualProfit) * 100) / Number(amountInBigInt);
-
-    // Dynamic minimum based on gas cost
-    const gasPrice = await provider.getFeeData();
-    const estimatedGas = 400000n;
-    const gasCostWei = estimatedGas * (gasPrice.maxFeePerGas || gasPrice.gasPrice || ethers.parseUnits('5', 'gwei'));
-    const minProfitRequired = gasCostWei * 3n; // 3x gas cost
 
     console.log(`
 ✅ Execution Validation:

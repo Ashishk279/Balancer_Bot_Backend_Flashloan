@@ -37,7 +37,7 @@ const priceFeed = initializePriceFeed(wsProvider);
 const BATCH_SIZE = 10; // Increased for better parallelization
 const INPUT_AMOUNT = new Decimal('5');
 const MIN_LIQUIDITY = new Decimal('50000');
-const MIN_LIQUIDITY_USD = ethers.parseUnits('100000', 6); // $10K minimum liquidity in USDC
+const MIN_LIQUIDITY_USD = ethers.parseUnits('100000', 6); // $100K minimum liquidity in USDC
 const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
@@ -1149,33 +1149,66 @@ async function fetchAllPricesOptimized1(pairs, batchSize = 10) {
   }
 
   // Filter valid prices and apply minimum liquidity threshold
-  const minLiquidityDecimal = new Decimal(ethers.formatUnits(MIN_LIQUIDITY_USD, 6)); // Convert to decimal: 10000
+  const minLiquidityDecimal = new Decimal(ethers.formatUnits(MIN_LIQUIDITY_USD, 6)); // Convert to decimal: 100000
+
+  // Token price estimates in USD (for liquidity calculation)
+  const tokenPriceEstimates = {
+    'WETH': 3000,
+    'ETH': 3000,
+    'WBTC': 65000,
+    'LINK': 15,
+    'UNI': 7,
+    'AAVE': 150,
+    'COMP': 50,
+    'SNX': 2,
+    'CRV': 0.5,
+    'MKR': 1500,
+    'YFI': 8000,
+    'MATIC': 0.8,
+    'SHIB': 0.00001,
+    // Stablecoins
+    'USDC': 1,
+    'USDT': 1,
+    'DAI': 1,
+    'crvUSD': 1
+  };
 
   allPrices = allPrices.filter(priceData => {
     if (!priceData || !priceData.priceOfAinB || !priceData.priceOfBinA) return false;
     if (!new Decimal(priceData.priceOfAinB).gt(0) || !new Decimal(priceData.priceOfBinA).gt(0)) return false;
     if (!priceData.liquidityInTokenB || !new Decimal(priceData.liquidityInTokenB).gt(0)) return false;
+    if (!priceData.liquidityInTokenA || !new Decimal(priceData.liquidityInTokenA).gt(0)) return false;
 
-    // Calculate USD value of liquidity
+    // Get token symbols
+    const tokenA = priceData.tokenA.symbol;
     const tokenB = priceData.tokenB.symbol;
-    let liquidityUSD = new Decimal(priceData.liquidityInTokenB);
 
-    // For non-stablecoin pairs, we need to convert to USD
-    // For stablecoins (USDC/USDT/DAI), liquidityInTokenB is already in USD
-    if (tokenB !== 'USDC' && tokenB !== 'USDT' && tokenB !== 'DAI') {
-      // For WETH/ETH, multiply by ETH price (rough estimate: ~$3000)
-      // For other tokens, skip liquidity check or use a rough conversion
-      // Note: This is a simplified approach; for production, fetch real-time prices
-      if (tokenB === 'WETH' || tokenB === 'ETH') {
-        // Rough estimate: multiply by ~3000 (will be more accurate with real-time price)
-        liquidityUSD = liquidityUSD.mul(3000);
-      } else {
-        // For other tokens, we'll skip the strict USD check and just ensure > 0
-        return true;
-      }
+    let liquidityUSD = null;
+
+    // Strategy 1: Check if tokenB is a stablecoin
+    if (tokenB === 'USDC' || tokenB === 'USDT' || tokenB === 'DAI' || tokenB === 'crvUSD') {
+      liquidityUSD = new Decimal(priceData.liquidityInTokenB);
+    }
+    // Strategy 2: Check if tokenA is a stablecoin (use tokenA liquidity instead)
+    else if (tokenA === 'USDC' || tokenA === 'USDT' || tokenA === 'DAI' || tokenA === 'crvUSD') {
+      liquidityUSD = new Decimal(priceData.liquidityInTokenA);
+    }
+    // Strategy 3: Use price estimates for known tokens
+    else if (tokenPriceEstimates[tokenB]) {
+      liquidityUSD = new Decimal(priceData.liquidityInTokenB).mul(tokenPriceEstimates[tokenB]);
+    }
+    else if (tokenPriceEstimates[tokenA]) {
+      liquidityUSD = new Decimal(priceData.liquidityInTokenA).mul(tokenPriceEstimates[tokenA]);
+    }
+    // Strategy 4: For unknown tokens, skip with warning
+    else {
+      console.warn(`⚠️ Cannot determine USD liquidity for ${priceData.poolName} (${tokenA}/${tokenB}) - skipping liquidity check for this pair`);
+      // Return false to filter out pairs with unknown token prices for safety
+      console.log(`🚫 Filtered out ${priceData.poolName} on ${priceData.dex}: Unknown token prices for ${tokenA}/${tokenB}`);
+      return false;
     }
 
-    // Filter: liquidity must be >= $10K
+    // Filter: liquidity must be >= $100K
     const meetsMinLiquidity = liquidityUSD.gte(minLiquidityDecimal);
 
     // Debug logging for rejected pools
@@ -1187,7 +1220,7 @@ async function fetchAllPricesOptimized1(pairs, batchSize = 10) {
   });
 
   timer.checkpoint('All prices fetched with liquidity');
-  logToMain(`✅ Fetched ${allPrices.length} valid prices with liquidity >= $10K in ${timer.getTotalTime()}ms`);
+  logToMain(`✅ Fetched ${allPrices.length} valid prices with liquidity >= $100K in ${timer.getTotalTime()}ms`);
 
   return allPrices;
 }

@@ -1076,25 +1076,22 @@ async function createFlashLoanPayload(opportunity, provider) {
         ? step2Result.expectedAmountOut
         : BigInt(step2Result.expectedAmountOut || step2Result.minAmountOut); // ✅ Use expectedAmountOut first!
 
-    // Calculate expected profit (including flash loan fee)
-    const FLASH_LOAN_FEE_BPS = 9n; // 0.09% = 9 basis points
-    const flashLoanFee = (loanAmountBigInt * FLASH_LOAN_FEE_BPS) / 10000n;
-    const totalRepayment = loanAmountBigInt + flashLoanFee;
+    // Calculate expected profit (Balancer flash loans have no fees)
+    const totalRepayment = loanAmountBigInt; // No flash loan fee for Balancer
 
     const expectedProfit = step2ExpectedAmountOut > totalRepayment
         ? step2ExpectedAmountOut - totalRepayment
         : 0n;
 
-    // Dynamic minimum based on trade size (accounting for flash loan fee)
+    // Dynamic minimum based on trade size
     const minProfitBPS = 50n; // 0.5%
     const minProfitRequired = (loanAmountBigInt * minProfitBPS) / 10000n;
 
     const gasCostFormatted = opportunity.gasEstimation || '0';
 
     console.log(`
-💰 Flash Loan Profit Analysis:
+💰 Flash Loan Profit Analysis (Balancer - No Fees):
    Loan Amount:      ${ethers.formatUnits(loanAmountBigInt, tokenB_dec)} ${tokenB.symbol}
-   Flash Loan Fee:   ${ethers.formatUnits(flashLoanFee, tokenB_dec)} ${tokenB.symbol} (0.09%)
    Total Repayment:  ${ethers.formatUnits(totalRepayment, tokenB_dec)} ${tokenB.symbol}
    Step 1 Out:       ${ethers.formatUnits(step1ExpectedAmountOut, tokenA_dec)} ${tokenA.symbol}
    Step 2 Out:       ${ethers.formatUnits(step2ExpectedAmountOut, tokenB_dec)} ${tokenB.symbol}
@@ -1103,11 +1100,11 @@ async function createFlashLoanPayload(opportunity, provider) {
    Gas Cost:         ${gasCostFormatted} ${tokenB.symbol}
 `);
 
-    // Validate profitability
-    if (expectedProfit < minProfitRequired) {
-        console.log('⚠️  Flash loan profit too low after recalculation');
-        return { success: false, error: 'Insufficient profit for flash loan' };
-    }
+    // // Validate profitability
+    // if (expectedProfit < minProfitRequired) {
+    //     console.log('⚠️  Flash loan profit too low after recalculation');
+    //     return { success: false, error: 'Insufficient profit for flash loan' };
+    // }
 
     const result = {
         path: [

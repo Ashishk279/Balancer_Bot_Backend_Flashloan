@@ -37,7 +37,7 @@ const priceFeed = initializePriceFeed(wsProvider);
 const BATCH_SIZE = 10; // Increased for better parallelization
 const INPUT_AMOUNT = new Decimal('5');
 const MIN_LIQUIDITY = new Decimal('50000');
-const MIN_LIQUIDITY_USD = ethers.parseUnits('10000', 6); // $10K minimum liquidity in USDC
+const MIN_LIQUIDITY_USD = ethers.parseUnits('100000', 6); // $10K minimum liquidity in USDC
 const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
@@ -1553,18 +1553,18 @@ async function processDirectArbitragePool(poolName, prices) {
       if (spread.lte(minSpread)) break; // 0.2% minimum spread
 
 
-      console.log('🔍 Token Info:', {
-        tokenA: {
-          symbol: buyPriceObj.tokenA.symbol,
-          decimals: buyPriceObj.tokenA.decimals,
-          address: buyPriceObj.tokenA.address
-        },
-        tokenB: {
-          symbol: buyPriceObj.tokenB.symbol,
-          decimals: buyPriceObj.tokenB.decimals,
-          address: buyPriceObj.tokenB.address
-        }
-      });
+      // console.log('🔍 Token Info:', {
+      //   tokenA: {
+      //     symbol: buyPriceObj.tokenA.symbol,
+      //     decimals: buyPriceObj.tokenA.decimals,
+      //     address: buyPriceObj.tokenA.address
+      //   },
+      //   tokenB: {
+      //     symbol: buyPriceObj.tokenB.symbol,
+      //     decimals: buyPriceObj.tokenB.decimals,
+      //     address: buyPriceObj.tokenB.address
+      //   }
+      // });
 
       quotePairs.push({
         buyPriceObj,
@@ -1596,20 +1596,20 @@ async function processDirectArbitragePool(poolName, prices) {
       const tokenBDecimals = normalizeDecimals(buyPriceObj.tokenB.decimals);
 
       // 🔍 DEBUG: Log token info for verification
-      console.log('🔍 Token Info:', {
-        tokenA: {
-          symbol: buyPriceObj.tokenA.symbol,
-          decimals: tokenADecimals,
-          address: buyPriceObj.tokenA.address
-        },
-        tokenB: {
-          symbol: buyPriceObj.tokenB.symbol,
-          decimals: tokenBDecimals,
-          address: buyPriceObj.tokenB.address
-        },
-        buyDex: buyPriceObj.dex,
-        sellDex: sellPriceObj.dex
-      });
+      // console.log('🔍 Token Info:', {
+      //   tokenA: {
+      //     symbol: buyPriceObj.tokenA.symbol,
+      //     decimals: tokenADecimals,
+      //     address: buyPriceObj.tokenA.address
+      //   },
+      //   tokenB: {
+      //     symbol: buyPriceObj.tokenB.symbol,
+      //     decimals: tokenBDecimals,
+      //     address: buyPriceObj.tokenB.address
+      //   },
+      //   buyDex: buyPriceObj.dex,
+      //   sellDex: sellPriceObj.dex
+      // });
 
       // ✅ OPTIMIZED: Use smaller input amounts to reduce slippage and price impact
       // These amounts are sized to find profitable opportunities with realistic slippage

@@ -1,11 +1,11 @@
 import { ethers } from "ethers";
 
 export const MIN_TRADE_AMOUNTS = {
-    WETH: ethers.parseEther('1'),      // Minimum 1 ETH
-    USDC: ethers.parseUnits('5000', 6), // Minimum $5000 USDC
-    USDT: ethers.parseUnits('5000', 6), // Minimum $5000 USDT
+    WETH: ethers.parseEther('0.5'),      // Minimum 1 ETH
+    USDC: ethers.parseUnits('1000', 6), // Minimum $5000 USDC
+    USDT: ethers.parseUnits('1000', 6), // Minimum $5000 USDT
     LINK: ethers.parseEther('50'),     // Minimum 100 LINK
-    WBTC: ethers.parseUnits('0.1', 8),   // Minimum 0.5 WBTC
+    WBTC: ethers.parseUnits('0.001', 8),   // Minimum 0.5 WBTC
     UNI: ethers.parseEther('100'),     // Minimum 100 UNI
 };
 

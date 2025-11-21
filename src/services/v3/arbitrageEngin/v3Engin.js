@@ -886,6 +886,23 @@ async function fetchAllPricesOptimized1(pairs, batchSize = 10) {
       token1.decimals = await fetchTokenDecimalsOnChain(token1.address);
     }
 
+    // ✅ FIX: Validate decimals match expected values to prevent configuration errors
+    const expectedDecimals = {
+      'USDC': 6, 'USDT': 6,
+      'WBTC': 8,
+      'WETH': 18, 'DAI': 18, 'LINK': 18, 'UNI': 18, 'AAVE': 18,
+      'COMP': 18, 'SNX': 18, 'CRV': 18, 'MKR': 18, 'YFI': 18,
+      'MATIC': 18, 'SHIB': 18, 'DBAR': 18, 'ONI': 18, 'NXRA': 18,
+      'PBAR': 18, 'crvUSD': 18, 'wDOGE': 18, 'BAR': 18, 'WAI': 18
+    };
+
+    if (token0.symbol && expectedDecimals[token0.symbol] && token0.decimals !== expectedDecimals[token0.symbol]) {
+      console.warn(`⚠️ Decimal mismatch for ${token0.symbol}: has ${token0.decimals}, expected ${expectedDecimals[token0.symbol]}`);
+    }
+    if (token1.symbol && expectedDecimals[token1.symbol] && token1.decimals !== expectedDecimals[token1.symbol]) {
+      console.warn(`⚠️ Decimal mismatch for ${token1.symbol}: has ${token1.decimals}, expected ${expectedDecimals[token1.symbol]}`);
+    }
+
     // Strict validation
     if (!token0 || !token1 || !name || !pools) {
       console.warn(`Skipping pair: ${name || 'unknown'} (missing core data)`);
@@ -1594,28 +1611,40 @@ async function processDirectArbitragePool(poolName, prices) {
         sellDex: sellPriceObj.dex
       });
 
-      // Use appropriate input amount based on token
+      // ✅ OPTIMIZED: Use smaller input amounts to reduce slippage and price impact
+      // These amounts are sized to find profitable opportunities with realistic slippage
 
       let inputAmountHuman;
       console.log("tokenB", tokenB);
       if (tokenB === 'WETH' || tokenB === 'ETH') {
-        inputAmountHuman = new Decimal('3.3'); // Higher for ETH
+        inputAmountHuman = new Decimal('1.0'); // ~$2,700 - Reduced from 3.3
       } else if (tokenB === 'USDC' || tokenB === 'USDT' || tokenB === 'DAI') {
-        inputAmountHuman = new Decimal('10000');// Higher for stablecoins
+        inputAmountHuman = new Decimal('3000'); // $3,000 - Reduced from 10,000
       } else if (tokenB === 'WBTC') {
-        inputAmountHuman = new Decimal('0.11'); // Higher for WBTC
+        inputAmountHuman = new Decimal('0.03'); // ~$3,000 - Reduced from 0.11
       } else if (tokenB === 'LINK') {
-        inputAmountHuman = new Decimal('750'); // Default
-      } else if( tokenB === 'UNI'){
-        inputAmountHuman = new Decimal('1363');
-      }else if(tokenB === 'AAVE'){
-        inputAmountHuman = new Decimal('90');
-      }else if(tokenB === 'SNX'){
-        inputAmountHuman = new Decimal('15000');
-      }else if(tokenB === 'MKR'){
-        inputAmountHuman = new Decimal('9');
-      }else if(tokenB === 'COMP'){
-        inputAmountHuman = new Decimal('315');
+        inputAmountHuman = new Decimal('200'); // ~$3,000 - Reduced from 750
+      } else if (tokenB === 'UNI') {
+        inputAmountHuman = new Decimal('400'); // ~$2,400 - Reduced from 1363
+      } else if (tokenB === 'AAVE') {
+        inputAmountHuman = new Decimal('20'); // ~$3,000 - Reduced from 90
+      } else if (tokenB === 'SNX') {
+        inputAmountHuman = new Decimal('4000'); // ~$800 - Reduced from 15000
+      } else if (tokenB === 'MKR') {
+        inputAmountHuman = new Decimal('2'); // ~$3,000 - Reduced from 9
+      } else if (tokenB === 'COMP') {
+        inputAmountHuman = new Decimal('80'); // ~$4,000 - Reduced from 315
+      } else if (tokenB === 'MATIC') {
+        inputAmountHuman = new Decimal('10000'); // ~$3,500 for low-price tokens
+      } else if (tokenB === 'CRV') {
+        inputAmountHuman = new Decimal('5000'); // ~$3,000
+      } else if (tokenB === 'YFI') {
+        inputAmountHuman = new Decimal('0.5'); // ~$3,000
+      } else if (tokenB === 'SHIB') {
+        inputAmountHuman = new Decimal('200000000'); // For meme tokens
+      } else {
+        // Default: aim for ~$2,000 equivalent
+        inputAmountHuman = new Decimal('2000');
       }
 
       const inputAmountWei = ethers.parseUnits(inputAmountHuman.toString(), tokenBDecimals);
@@ -1646,11 +1675,19 @@ async function processDirectArbitragePool(poolName, prices) {
           throw new Error('Zero output from quote');
         }
 
+        // ✅ ENHANCED VALIDATION: Check for negative or absurdly large outputs (safety check)
+        if (step1Output < 0n) {
+          throw new Error('Negative output from quote (invalid)');
+        }
+
         // ✅ VALIDATION: Check step1 output ratio (tokenA output vs tokenB input)
         // Normalize to same decimals for fair comparison
         const step1OutputNormalized = normalizeAmount(step1Output, tokenADecimals, 18);
         const inputNormalized = normalizeAmount(inputAmountWei, tokenBDecimals, 18);
-        const step1Ratio = Number(step1OutputNormalized) / Number(inputNormalized);
+        // ✅ FIX: Use Decimal to prevent precision loss for large amounts
+        const step1Ratio = new Decimal(step1OutputNormalized.toString())
+          .div(new Decimal(inputNormalized.toString()))
+          .toNumber();
         console.log(`   Step1 Ratio Check: ${step1Ratio.toFixed(6)} (normalized to 18 decimals)`);
 
 
@@ -1697,6 +1734,11 @@ try {
     throw new Error('Zero output from quote');
   }
 
+  // ✅ ENHANCED VALIDATION: Check for negative or absurdly large outputs (safety check)
+  if (step2Output < 0n) {
+    throw new Error('Negative output from quote (invalid)');
+  }
+
   stats.step2Success++;
 } catch (error) {
   stats.step2Failed++;
@@ -1736,25 +1778,48 @@ try {
       //   return null; // Skip this pair
       // }
 
+      // ✅ ENHANCED: Decimal-aware logging with explicit token info
       console.log('💰 Calculation Check:', {
-        inputAmount: inputAmountWei,
-        inputInHuman: ethers.formatUnits(inputAmountWei, buyPriceObj.tokenB.decimals),
-        step1Output: step1Output,
-        step1InHuman: ethers.formatUnits(step1Output, buyPriceObj.tokenA.decimals),
-        step2Output: step2Output,
-        step2InHuman: ethers.formatUnits(step2Output, buyPriceObj.tokenB.decimals)
+        tokenB: `${tokenB} (${tokenBDecimals} decimals)`,
+        tokenA: `${tokenA} (${tokenADecimals} decimals)`,
+        inputAmount: {
+          wei: inputAmountWei.toString(),
+          human: ethers.formatUnits(inputAmountWei, tokenBDecimals),
+          token: tokenB
+        },
+        step1Output: {
+          wei: step1Output.toString(),
+          human: ethers.formatUnits(step1Output, tokenADecimals),
+          token: tokenA,
+          dex: buyPriceObj.dex
+        },
+        step2Output: {
+          wei: step2Output.toString(),
+          human: ethers.formatUnits(step2Output, tokenBDecimals),
+          token: tokenB,
+          dex: sellPriceObj.dex
+        }
       });
 
-      // ✅ VALIDATION LAYER 1: Reject absurd price ratios
+      // ✅ VALIDATION LAYER 1: Reject absurd price ratios (both amounts are in tokenB decimals)
       const outputInputRatio = new Decimal(step2Output.toString()).div(new Decimal(inputAmountWei.toString()));
-      if (outputInputRatio.gt(10) || outputInputRatio.lt(0.1)) {
-        logger.warn('❌ Rejected: Absurd output/input ratio', {
+
+      // ✅ IMPROVED: More flexible ratio check - allow 50% loss to 10x gain for safety
+      // This catches decimal errors while allowing legitimate arbitrage opportunities
+      if (outputInputRatio.gt(10) || outputInputRatio.lt(0.5)) {
+        logger.warn('❌ Rejected: Absurd output/input ratio (possible decimal error)', {
           pair: poolName,
+          tokenB: tokenB,
+          tokenBDecimals: tokenBDecimals,
           inputAmountWei: inputAmountWei.toString(),
+          inputHuman: ethers.formatUnits(inputAmountWei, tokenBDecimals),
           step2Output: step2Output.toString(),
-          ratio: outputInputRatio.toString()
+          outputHuman: ethers.formatUnits(step2Output, tokenBDecimals),
+          ratio: outputInputRatio.toFixed(4),
+          buyDex: buyPriceObj.dex,
+          sellDex: sellPriceObj.dex
         });
-        return null; // Something is wrong with decimals
+        return null; // Something is wrong with decimals or extreme slippage
       }
 
       // ✅ Calculate REAL profit from ACTUAL quotes

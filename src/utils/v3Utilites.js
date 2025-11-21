@@ -2,9 +2,31 @@ import Decimal from "decimal.js";
 import { ethers } from "ethers";
 import { MIN_SPREADS, TOKEN_CATEGORIES } from "../config/index.js";
 
+/**
+ * ✅ IMPROVED: Normalize token decimals with validation and logging
+ * Ensures decimals are within valid range (0-18) for ERC20 tokens
+ * @param {number|string} decimals - The decimals value to normalize
+ * @returns {number} - Normalized decimals (defaults to 18 if invalid)
+ */
 function normalizeDecimals(decimals) {
     const parsed = parseInt(decimals);
-    if (isNaN(parsed) || parsed < 0 || parsed > 18) return 18;
+
+    // Invalid or out-of-range decimals - log warning and default to 18
+    if (isNaN(parsed)) {
+        console.warn(`⚠️ Invalid decimals value (NaN): ${decimals}, defaulting to 18`);
+        return 18;
+    }
+
+    if (parsed < 0) {
+        console.warn(`⚠️ Negative decimals value: ${parsed}, defaulting to 18`);
+        return 18;
+    }
+
+    if (parsed > 18) {
+        console.warn(`⚠️ Decimals value exceeds 18: ${parsed}, capping to 18`);
+        return 18;
+    }
+
     return parsed;
 }
 

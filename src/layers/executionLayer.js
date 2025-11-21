@@ -174,7 +174,7 @@ export async function executeOpportunities() {
           type: opp.strategy || opp.type || 'v3_direct', // Strategy type, fallback to opp.type or default
           timestamp: Date.now(), // Current execution timestamp in milliseconds
           estimated_profit: opp.expectedProfit || opp.profit || '0', // Use expected or actual profit
-          execution_payload: opp.execution_payload || null, // Full calldata/payload from Redis (already parsed)
+          execution_payload: execution_payload || null, // Full calldata/payload from Redis (already parsed)
           pair: opp.poolId || `${opp.tokenA.symbol}/${opp.tokenB.symbol}`, // Fallback to symbol pair if poolId missing
           buyDex: opp.buyDex,
           sellDex: opp.sellDex,

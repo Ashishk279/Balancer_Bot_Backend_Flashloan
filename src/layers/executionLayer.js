@@ -174,7 +174,7 @@ export async function executeOpportunities() {
           type: opp.strategy || opp.type || 'v3_direct', // Strategy type, fallback to opp.type or default
           timestamp: Date.now(), // Current execution timestamp in milliseconds
           estimated_profit: opp.expectedProfit || opp.profit || '0', // Use expected or actual profit
-          execution_payload: opp.execution_payload || null, // Full calldata/payload from Redis (already parsed)
+          execution_payload: execution_payload || null, // Full calldata/payload from Redis (already parsed)
           pair: opp.poolId || `${opp.tokenA.symbol}/${opp.tokenB.symbol}`, // Fallback to symbol pair if poolId missing
           buyDex: opp.buyDex,
           sellDex: opp.sellDex,
@@ -360,6 +360,18 @@ async function validateExecutionProfitability(opportunity, provider) {
     }
 
     const { path, amountIn } = opportunity.execution_payload;
+
+    // ✅ Verify amountIn exists
+    if (!amountIn) {
+      console.log('❌ CRITICAL: amountIn is missing from execution_payload');
+      console.log('Available fields:', Object.keys(opportunity.execution_payload));
+      return {
+        success: false,
+        error: 'Missing amountIn in execution_payload'
+      };
+    }
+
+    console.log('✅ amountIn extracted successfully:', amountIn);
 
     // Validate path structure
     if (!Array.isArray(path) || path.length !== 2) {
@@ -911,29 +923,73 @@ export async function executeFlashLoanTransaction(payload, provider, opp = null)
   const wallet = new ethers.Wallet(privateKey, provider);
 
   try {
+    // ✅ STEP 1: Verify execution_payload structure
+    console.log('\n🔍 Flash Loan Execution - Payload Verification:');
+    console.log('execution_payload keys:', Object.keys(payload.execution_payload || {}));
+
+    if (!payload.execution_payload) {
+      throw new Error('Missing execution_payload in payload');
+    }
+
+    if (!payload.execution_payload.path || !Array.isArray(payload.execution_payload.path)) {
+      throw new Error('Invalid or missing path in execution_payload');
+    }
+
+    console.log('✅ Path structure valid - Steps:', payload.execution_payload.path.length);
+
+    // ✅ STEP 2: Verify required fields exist
+    const requiredFields = ['loanToken', 'loanAmount', 'amountIn', 'minProfit', 'deadline'];
+    const missingFields = requiredFields.filter(field => !payload.execution_payload[field]);
+
+    if (missingFields.length > 0) {
+      console.log('❌ Missing required fields:', missingFields);
+      throw new Error(`Missing required fields in execution_payload: ${missingFields.join(', ')}`);
+    }
+
+    console.log('✅ All required fields present:', requiredFields);
+
     // Create contract instance
     const contract = new ethers.Contract(contractAddress, ABI, wallet);
 
-    // Prepare path array as 2D array [ [router, tokenIn, tokenOut, dexType, fee, minAmountOut], ... ]
-    const formattedPath = payload.execution_payload.path.map(step => [
-      step.router,           // address
-      step.tokenIn,          // address
-      step.tokenOut,         // address
-      step.dexType || 0,     // uint8
-      step.fee || 0,         // uint24
-      step.minAmountOut      // uint256 (already formatted as BigInt-compatible string)
-    ]);
+    // ✅ STEP 3: Prepare and validate path array
+    const formattedPath = payload.execution_payload.path.map((step, index) => {
+      console.log(`\n📍 Step ${index + 1}:`, {
+        router: step.router,
+        tokenIn: step.tokenIn,
+        tokenOut: step.tokenOut,
+        dexType: step.dexType || 0,
+        fee: step.fee || 0,
+        minAmountOut: step.minAmountOut
+      });
+
+      return [
+        step.router,           // address
+        step.tokenIn,          // address
+        step.tokenOut,         // address
+        step.dexType || 0,     // uint8
+        step.fee || 0,         // uint24
+        step.minAmountOut      // uint256 (already formatted as BigInt-compatible string)
+      ];
+    });
 
     logger.info('Formatted path for flash loan execution', {
       path: JSON.stringify(formattedPath, null, 2),
       service: 'flashLoanExecutionLayer'
     });
 
-    // Extract scalar values
+    // ✅ STEP 4: Extract and validate scalar values
     const loanToken = payload.execution_payload.loanToken; // address
     const loanAmount = payload.execution_payload.loanAmount; // uint256 (BigInt-compatible string)
+    const amountIn = payload.execution_payload.amountIn; // uint256 (needed for validation)
     const minProfit = payload.execution_payload.minProfit; // uint256 (BigInt-compatible string)
     const deadline = payload.execution_payload.deadline; // uint256
+
+    console.log('\n💰 Flash Loan Parameters:');
+    console.log('  loanToken:', loanToken);
+    console.log('  loanAmount:', loanAmount, '(Wei)');
+    console.log('  amountIn:', amountIn, '(Wei) ✅');
+    console.log('  minProfit:', minProfit, '(Wei)');
+    console.log('  deadline:', deadline, '(Unix timestamp)');
 
     // Validate inputs
     if (!ethers.isAddress(loanToken)) {

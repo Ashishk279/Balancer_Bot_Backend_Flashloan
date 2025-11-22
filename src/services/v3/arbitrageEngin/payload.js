@@ -1127,6 +1127,7 @@ async function createFlashLoanPayload(opportunity, provider) {
         ],
         loanToken: tokenB.address, // Flash loan is taken in tokenB
         loanAmount: loanAmount.toString(), // Raw units in Wei
+        amountIn: loanAmount.toString(), // Same as loanAmount for flash loans - needed for validation
         minProfit: minProfitRequired.toString(), // Raw units in Wei
         deadline: (timestamp + 300).toString(), // 5 minutes (same as direct execution)
     };

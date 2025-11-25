@@ -168,31 +168,122 @@ export function calculateAdaptiveInputAmount(priceData) {
 export function useRecommendedMaxTrade(priceData) {
   const tokenB = priceData.tokenB.symbol;
   const tokenBDecimals = normalizeDecimals(priceData.tokenB.decimals);
-  
+
   // Use the pre-calculated recommendedMaxTradeInB
   if (priceData.recommendedMaxTradeInB) {
     const recommendedMax = new Decimal(priceData.recommendedMaxTradeInB);
-    
+
     // Use 50% of recommended max for extra safety
     const inputAmount = recommendedMax.mul(0.5);
-    
+
     // Apply constraints
     const constraints = getTokenConstraints(tokenB);
-    
+
     if (inputAmount.lt(constraints.min)) {
       console.log(`📊 Recommended amount ${inputAmount.toFixed(4)} below min, using ${constraints.min}`);
       return new Decimal(constraints.min);
     }
-    
+
     if (inputAmount.gt(constraints.max)) {
       console.log(`📊 Recommended amount ${inputAmount.toFixed(4)} above max, using ${constraints.max}`);
       return new Decimal(constraints.max);
     }
-    
+
     console.log(`💧 ${priceData.poolName}: Using 50% of recommended max = ${inputAmount.toFixed(6)} ${tokenB}`);
     return inputAmount;
   }
-  
+
   // Fallback to adaptive if recommendedMaxTradeInB not available
   return calculateAdaptiveInputAmount(priceData);
+}
+
+/**
+ * ✅ FIX: Calculate safe trade amount based on MINIMUM of both pools
+ * This prevents trades that would fail due to insufficient sell pool liquidity
+ * @param {Object} buyPoolData - Buy pool price data with liquidity
+ * @param {Object} sellPoolData - Sell pool price data with liquidity
+ * @returns {Decimal|null} - Safe trade amount or null if insufficient liquidity
+ */
+export function calculateSafeTradeAmount(buyPoolData, sellPoolData) {
+  const tokenB = buyPoolData.tokenB.symbol;
+  const tokenBDecimals = normalizeDecimals(buyPoolData.tokenB.decimals);
+
+  // Get liquidity from both pools
+  const buyPoolLiquidity = new Decimal(buyPoolData.liquidityInTokenB || '0');
+  const sellPoolLiquidity = new Decimal(sellPoolData.liquidityInTokenB || '0');
+
+  console.log(`   📊 Buy Pool Liquidity: ${buyPoolLiquidity.toFixed(4)} ${tokenB}`);
+  console.log(`   📊 Sell Pool Liquidity: ${sellPoolLiquidity.toFixed(4)} ${tokenB}`);
+
+  // Step 1: Check minimum liquidity requirements
+  const minRequiredLiquidity = new Decimal('10'); // At least 10 WETH equivalent
+
+  if (sellPoolLiquidity.lt(minRequiredLiquidity)) {
+    console.log(`   ⚠️ Sell pool liquidity too low (${sellPoolLiquidity.toFixed(4)} < 10 ${tokenB}), skipping`);
+    return null;
+  }
+
+  if (buyPoolLiquidity.lt(minRequiredLiquidity)) {
+    console.log(`   ⚠️ Buy pool liquidity too low (${buyPoolLiquidity.toFixed(4)} < 10 ${tokenB}), skipping`);
+    return null;
+  }
+
+  // Step 2: Get minimum liquidity between both pools
+  const minLiquidity = buyPoolLiquidity.lt(sellPoolLiquidity)
+    ? buyPoolLiquidity
+    : sellPoolLiquidity;
+
+  console.log(`   📊 Min Liquidity: ${minLiquidity.toFixed(4)} ${tokenB}`);
+
+  // Step 3: Calculate percentage based on minimum liquidity
+  let maxPercentage;
+  const minLiquidityNum = minLiquidity.toNumber();
+
+  if (minLiquidityNum > 10000) {
+    maxPercentage = 0.005;  // 0.5% for very high liquidity
+  } else if (minLiquidityNum > 1000) {
+    maxPercentage = 0.01;   // 1% for high liquidity
+  } else if (minLiquidityNum > 100) {
+    maxPercentage = 0.02;   // 2% for medium liquidity
+  } else {
+    maxPercentage = 0.025;  // 2.5% for low liquidity
+  }
+
+  console.log(`   📊 Using ${(maxPercentage * 100).toFixed(2)}% of min liquidity`);
+
+  // Step 4: Calculate amount based on minimum liquidity
+  let amount = minLiquidity.mul(maxPercentage);
+
+  // Step 5: Apply token-specific min/max limits
+  const constraints = getTokenConstraints(tokenB);
+  const minAmount = new Decimal(constraints.min);
+  const maxAmount = new Decimal(constraints.max);
+
+  if (amount.lt(minAmount)) {
+    console.log(`   📊 Amount ${amount.toFixed(4)} below min, using ${minAmount.toFixed(4)}`);
+    amount = minAmount;
+  }
+
+  if (amount.gt(maxAmount)) {
+    console.log(`   📊 Amount ${amount.toFixed(4)} above max, using ${maxAmount.toFixed(4)}`);
+    amount = maxAmount;
+  }
+
+  // Step 6: Extra safety - amount should not exceed 5% of sell pool
+  const maxSellAmount = sellPoolLiquidity.mul(0.05); // Max 5% of sell pool
+
+  if (amount.gt(maxSellAmount)) {
+    console.log(`   ⚠️ Reducing amount to 5% of sell pool liquidity (${maxSellAmount.toFixed(4)} ${tokenB})`);
+    amount = maxSellAmount;
+  }
+
+  // Step 7: Final check - ensure it's still above minimum
+  if (amount.lt(minAmount)) {
+    console.log(`   ⚠️ Final amount ${amount.toFixed(4)} below minimum ${minAmount.toFixed(4)}, skipping`);
+    return null;
+  }
+
+  console.log(`   ✅ Safe Trade Amount: ${amount.toFixed(6)} ${tokenB}`);
+
+  return amount;
 }

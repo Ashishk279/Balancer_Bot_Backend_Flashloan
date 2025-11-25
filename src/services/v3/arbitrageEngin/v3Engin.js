@@ -18,7 +18,7 @@ import { calculateMaxTradeSize, calculateV2Liquidity, calculateV3Liquidity } fro
 import validator from './arbitrageValidator.js';
 import { validateTriangularPath, isValidOutputAmount } from '../../../utils/decimalFix.js';
 import { MIN_TRADE_AMOUNTS } from '../../../config/index.js';
-import { calculateAdaptiveInputAmount } from '../../../utils/dynamicAmount.js';
+import { calculateAdaptiveInputAmount, calculateSafeTradeAmount } from '../../../utils/dynamicAmount.js';
 
 
 // Initialize provider
@@ -38,7 +38,7 @@ const priceFeed = initializePriceFeed(wsProvider);
 const BATCH_SIZE = 10; // Increased for better parallelization
 const INPUT_AMOUNT = new Decimal('5');
 const MIN_LIQUIDITY = new Decimal('50000');
-const MIN_LIQUIDITY_USD = ethers.parseUnits('100000', 6); // $100K minimum liquidity in USDC
+const MIN_LIQUIDITY_USD = ethers.parseUnits('10000', 6); // $100K minimum liquidity in USDC
 const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
@@ -2130,25 +2130,20 @@ async function processDirectArbitragePool(poolName, prices) {
       const tokenBDecimals = normalizeDecimals(buyPriceObj.tokenB.decimals);
 
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ✅ DYNAMIC INPUT AMOUNT CALCULATION BASED ON LIQUIDITY
+      // ✅ SAFE INPUT AMOUNT CALCULATION BASED ON BOTH POOLS
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      
-      // Calculate dynamic input amount based on buy pool's liquidity
-      // Using adaptive strategy that adjusts percentage based on pool size
-      const inputAmountHuman = calculateAdaptiveInputAmount(buyPriceObj);
 
-      // Skip if pool has insufficient liquidity
+      // Calculate safe input amount based on MINIMUM of both pools
+      // This prevents trades that would fail due to insufficient sell pool liquidity
+      const inputAmountHuman = calculateSafeTradeAmount(buyPriceObj, sellPriceObj);
+
+      // Skip if pools have insufficient liquidity
       if (!inputAmountHuman || inputAmountHuman === null) {
-        console.log(`⏭️ Skipping ${poolName} due to insufficient liquidity`);
+        console.log(`⏭️ Skipping ${poolName} due to insufficient liquidity in buy or sell pool`);
         return null;
       }
 
-      // Alternative: Use fixed 1.5% of liquidity
-      // const inputAmountHuman = calculateDynamicInputAmount(buyPriceObj, 0.015);
-
-      console.log(`💰 ${poolName} - Using dynamic input: ${inputAmountHuman.toFixed(4)} ${tokenB}`);
-      console.log(`   📊 Buy Pool Liquidity: ${buyPriceObj.liquidityInTokenB} ${tokenB}`);
-      console.log(`   📊 Sell Pool Liquidity: ${sellPriceObj.liquidityInTokenB} ${tokenB}`);
+      console.log(`💰 ${poolName} - Using safe input: ${inputAmountHuman.toFixed(4)} ${tokenB}`);
 
       const inputAmountWei = ethers.parseUnits(inputAmountHuman.toString(), tokenBDecimals);
 

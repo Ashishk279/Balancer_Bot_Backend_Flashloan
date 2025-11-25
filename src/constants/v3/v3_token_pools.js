@@ -355,16 +355,6 @@ export const DIRECT_SWAP_PAIRS = [
   //   }
   // },
 
-  // MATIC/LINK
-  {
-    name: 'MATIC/LINK',
-    token0: getTokenInfo(TOKENS.MATIC.address),
-    token1: getTokenInfo(TOKENS.LINK.address),
-    pools: {
-      UniswapV2: { fee: 0, address: '0x01fb16A4f144419Da8fbE4F1f3F27321368456ef' },
-      // UniswapV3_10000: { fee: 10000, address: '0xCFc389e23728f72558eEe13D04B326DdCdD88Be3' }
-    }
-  },
 
   // UNI/WETH
   {
@@ -406,45 +396,6 @@ export const DIRECT_SWAP_PAIRS = [
   //     // UniswapV3_10000: { fee: 10000, address: '0xfe47DAD3d8072a7c5E38202bC4B82D322163E2b6' }
   //   }
   // },
-
-  // UNI/DAI
-  {
-    name: 'UNI/DAI',
-    token0: getTokenInfo(TOKENS.UNI.address),
-    token1: getTokenInfo(TOKENS.DAI.address),
-    pools: {
-      // UniswapV2: { fee: 0, address: '0xf00e80f0DE9aEa0B33aA229a4014572777E422EE' },
-      // SushiswapV2: { fee: 0, address: '0xd9CeDc999bE891D7fC65996C708fd827959F4C8A' },
-      UniswapV3_500: { fee: 500, address: '0x57D7d040438730d4029794799dEEd8601E23fF80' },
-      UniswapV3_3000: { fee: 3000, address: '0x7cf70eD6213F08b70316bD80F7c2ddDc94E41aC5' },
-      UniswapV3_10000: { fee: 10000, address: '0xD6993E525FAdB23971a20bBb057Af9841eAE076F' }
-    }
-  },
-
-  // UNI/WBTC
-  {
-    name: 'UNI/WBTC',
-    token0: getTokenInfo(TOKENS.UNI.address),
-    token1: getTokenInfo(TOKENS.WBTC.address),
-    pools: {
-      UniswapV2: { fee: 0, address: '0xAA873C9DA6541f13C89416C17271b4c21bf7B2d7' },
-      UniswapV3_3000: { fee: 3000, address: '0x8F0CB37cdFF37E004E0088f563E5fe39E05CCC5B' },
-      // UniswapV3_10000: { fee: 10000, address: '0x83819fB5184E2a418d9309bC1Ac46eDB67F89E7d' }
-    }
-  },
-
-  // UNI/LINK
-  {
-    name: 'UNI/LINK',
-    token0: getTokenInfo(TOKENS.UNI.address),
-    token1: getTokenInfo(TOKENS.LINK.address),
-    pools: {
-      UniswapV2: { fee: 0, address: '0x9b2662DC8b80B0fE79310AD316b943CB5Bb15e8b' },
-      SushiswapV2: { fee: 0, address: '0xCf789E7f539151b18E442DC183E7C454edFb69Aa' },
-      UniswapV3_3000: { fee: 3000, address: '0x9f178e86e42ddf2379cb3d2acf9ed67a1ed2550a' },
-      // UniswapV3_10000: { fee: 10000, address: '0xA6B9a13B34db2A00284299c47DACF49FB62C1755' }
-    }
-  },
 
   // LINK/WETH
   {
@@ -503,16 +454,6 @@ export const DIRECT_SWAP_PAIRS = [
   //   }
   // },
 
-  // LINK/WBTC
-  {
-    name: 'LINK/WBTC',
-    token0: getTokenInfo(TOKENS.LINK.address),
-    token1: getTokenInfo(TOKENS.WBTC.address),
-    pools: {
-      UniswapV2: { fee: 0, address: '0x8a01BA64FBc7B12ee13F817DFa862881feC531b8' },
-      UniswapV3_3000: { fee: 3000, address: '0x618004783d422DfB792D07D742549D5A24648dF2' }
-    }
-  },
 
   // CRV/WETH
   {
@@ -640,9 +581,7 @@ export const DIRECT_SWAP_PAIRS = [
     pools: {
       UniswapV2: { fee: 0, address: '0xDFC14d2Af169B0D36C4EFF567Ada9b2E0CAE044f' },
       SushiswapV2: { fee: 0, address: '0xD75EA151a61d06868E31F8988D28DFE5E9df57B4' },
-      // UniswapV3_500: { fee: 500, address: '0x4674abc5796e1334B5075326b39B748bee9EaA34' },
       UniswapV3_3000: { fee: 3000, address: '0x5aB53EE1d50eeF2C1DD3d5402789cd27bB52c1bB' },
-      UniswapV3_10000: { fee: 10000, address: '0x1353fE67fFf8f376762b7034DC9066f0bE15a723' }
     }
   },
 
@@ -918,12 +857,10 @@ export const DIRECT_SWAP_PAIRS = [
       SushiswapV2: { fee: 0, address: '0x397FF1542f962076d0BFE58eA045FfA2d347ACa0' },
       UniswapV3_3000: { fee: 3000, address: '0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8' },
 
-      SushiswapV3_500: { fee: 500, address: '0x35644Fb61aFBc458bf92B15AdD6ABc1996Be5014' },
       SushiswapV3_3000: { fee: 3000, address: '0x763d3b7296e7C9718AD5B058aC2692A19E5b3638'  },
       SushiswapV3_10000: { fee: 10000, address: '0x1D437AC0a77d9d0Ab6A512A6b054930Aa582A5B7' },
 
       PancakeswapV3_500: { fee: 500, address: '0x1ac1A8FEaAEa1900C4166dEeed0C11cC10669D36' },
-      PancakeswapV3_10000: { fee: 10000, address: '0xBAa22bc3b7D9Ed30a3B1DDbC6446AC397a4c80a4'  },
     }
   },
   {
@@ -933,9 +870,9 @@ export const DIRECT_SWAP_PAIRS = [
     pools: {
       UniswapV2: { fee: 0, address: '0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11' },
       SushiswapV2: { fee: 0, address: '0xC3D03e4F041Fd4cD388c549Ee2A29a9E5075882f' },
-      UniswapV3_3000: { fee: 3000, address: '0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8' },
+     
       SushiswapV3_500: { fee: 500, address: '0xabb097C772AcDc0b743EF85c59040E9bD8F8bDa4'  },
-      SushiswapV3_3000: { fee: 3000, address: '0x769DB46F39C42ee7AD5f71F4167c47EdD281E767'  },
+     
     }
   },
   // {
@@ -957,7 +894,6 @@ export const DIRECT_SWAP_PAIRS = [
       SushiswapV2: { fee: 0, address: '0x06da0fd433C1A5d7a4faa01111c044910A184553' },
       UniswapV3_500: { fee: 500, address: '0x11b815efB8f581194ae79006d24E0d814B7697F6' },
       UniswapV3_3000: { fee: 3000, address: '0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36' },
-      SushiswapV3_500: { fee: 500, address: '0x72c2178E082feDB13246877B5aA42ebcE1b72218'  },
       SushiswapV3_3000: { fee: 3000, address: '0x6a11ED98B1a3ac36A768ebbbbA36DED101Da5a3f'  },
       PancakeswapV3_500: { fee: 500, address: '0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C'  },
       PancakeswapV3_10000: { fee: 10000, address: '0x486B54c7FFbA86246652C7444dc9498e8D8b627c'  },

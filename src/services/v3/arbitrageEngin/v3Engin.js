@@ -57,9 +57,9 @@ const MAX_FLASH_LOAN_FEE = new Decimal('0.0009');
 const PRIORITY_FEE = new Decimal('0.001'); // 0.1%
 const MIN_TRADE_SIZE = new Decimal('0.0001');
 
-// TESTING THRESHOLDS (lower thresholds to see if opportunities exist)
-const MIN_PROFIT_THRESHOLD = new Decimal('0.00001'); // $0.20 profit minimum (lowered for testing)
-const MIN_PROFIT_PERCENTAGE = new Decimal('0.001'); // 0.1% return minimum (lowered for testing)
+// PROFIT THRESHOLDS (after gas costs, using Balancer free flash loans!)
+const MIN_PROFIT_THRESHOLD = new Decimal('0.002'); // 0.002 ETH minimum net profit (~$6) after gas
+const MIN_PROFIT_PERCENTAGE = new Decimal('0.003'); // 0.3% return minimum after gas costs
 const MAX_SLIPPAGE = new Decimal('0.03'); // 3% max slippage
 const MAX_GAS_PRICE_GWEI = 100; // 100 Gwei max gas price
 
@@ -2136,10 +2136,16 @@ async function processDirectArbitragePool(poolName, prices) {
       // Calculate dynamic input amount based on buy pool's liquidity
       // Using adaptive strategy that adjusts percentage based on pool size
       const inputAmountHuman = calculateAdaptiveInputAmount(buyPriceObj);
-      
+
+      // Skip if pool has insufficient liquidity
+      if (!inputAmountHuman || inputAmountHuman === null) {
+        console.log(`⏭️ Skipping ${poolName} due to insufficient liquidity`);
+        return null;
+      }
+
       // Alternative: Use fixed 1.5% of liquidity
       // const inputAmountHuman = calculateDynamicInputAmount(buyPriceObj, 0.015);
-      
+
       console.log(`💰 ${poolName} - Using dynamic input: ${inputAmountHuman.toFixed(4)} ${tokenB}`);
       console.log(`   📊 Buy Pool Liquidity: ${buyPriceObj.liquidityInTokenB} ${tokenB}`);
       console.log(`   📊 Sell Pool Liquidity: ${sellPriceObj.liquidityInTokenB} ${tokenB}`);
@@ -2271,16 +2277,46 @@ async function processDirectArbitragePool(poolName, prices) {
         return null;
       }
 
-      // ✅ Calculate REAL profit
+      // ✅ Calculate REAL profit with gas costs (Balancer flash loans are FREE!)
       if (step2Output <= inputAmountWei) {
         stats.unprofitableSkipped++;
         return null;
       }
 
-      console.log(`\n🔹 Potential Opportunity Detected (${pairIndex}): ${poolName}`);
+      // Calculate gross profit (output - input)
+      const grossProfit = new Decimal(step2Output.toString()).minus(new Decimal(inputAmountWei.toString()));
 
-      const netProfit = new Decimal(step2Output.toString()).minus(new Decimal(inputAmountWei.toString()));
-      console.log(`   Net Profit (wei): ${netProfit}`);
+      // Estimate gas cost in tokenB (conservative estimate for Balancer flash loan arbitrage)
+      const gasEstimateEth = new Decimal('0.003'); // ~0.003 ETH for arbitrage tx (~$9 at current prices)
+      let gasCostInTokenB;
+
+      if (tokenB === 'WETH' || tokenB === 'ETH') {
+        // Already in ETH
+        gasCostInTokenB = ethers.parseUnits(gasEstimateEth.toString(), tokenBDecimals);
+      } else {
+        // Convert gas cost to tokenB using price
+        const ethPriceInTokenB = new Decimal(buyPriceObj.priceOfBinA); // How much tokenB per ETH
+        const gasCostInTokenBHuman = gasEstimateEth.mul(ethPriceInTokenB);
+        gasCostInTokenB = ethers.parseUnits(gasCostInTokenBHuman.toFixed(tokenBDecimals), tokenBDecimals);
+      }
+
+      // Calculate net profit = gross profit - gas cost (NO flash loan fee with Balancer!)
+      const netProfit = grossProfit.minus(gasCostInTokenB.toString());
+
+      // Reject if not profitable after gas costs
+      if (netProfit.lte(0)) {
+        console.log(`❌ Unprofitable after gas cost (${pairIndex}): ${poolName}`);
+        console.log(`   Gross Profit: ${ethers.formatUnits(grossProfit.toString(), tokenBDecimals)} ${tokenB}`);
+        console.log(`   Gas Cost: ${ethers.formatUnits(gasCostInTokenB.toString(), tokenBDecimals)} ${tokenB}`);
+        console.log(`   Net Profit: ${ethers.formatUnits(netProfit.toString(), tokenBDecimals)} ${tokenB}`);
+        stats.unprofitableSkipped++;
+        return null;
+      }
+
+      console.log(`\n🔹 Potential Opportunity Detected (${pairIndex}): ${poolName}`);
+      console.log(`   Gross Profit (wei): ${grossProfit.toString()}`);
+      console.log(`   Gas Cost (wei): ${gasCostInTokenB.toString()}`);
+      console.log(`   Net Profit (wei): ${netProfit.toString()}`);
 
       stats.profitableFound++;
 

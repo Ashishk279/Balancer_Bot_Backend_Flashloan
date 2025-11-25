@@ -13,6 +13,13 @@ export function calculateDynamicInputAmount(priceData, liquidityPercentage = 0.0
     return getFallbackAmount(tokenB);
   }
 
+  // Skip pools with extremely low liquidity (< 0.1 WETH / < $300)
+  const minLiquidity = new Decimal('0.1');
+  if (liquidityInTokenB.lt(minLiquidity)) {
+    console.warn(`⚠️ Pool ${priceData.poolName} has very low liquidity (${liquidityInTokenB.toFixed(4)} ${tokenB}), skipping`);
+    return null; // Return null to skip this pool
+  }
+
   // Calculate amount as percentage of liquidity (0.5-2.5% to minimize slippage)
   let calculatedAmount = liquidityInTokenB.mul(liquidityPercentage);
 
@@ -46,34 +53,34 @@ export function calculateDynamicInputAmount(priceData, liquidityPercentage = 0.0
 export function getTokenConstraints(tokenSymbol) {
   const constraints = {
     // High-value tokens
-    'WETH': { min: 0.5, max: 10.0 },      // $1,350 - $27,000
-    'ETH': { min: 0.5, max: 10.0 },
-    'WBTC': { min: 0.01, max: 0.2 },      // $650 - $13,000
-    'YFI': { min: 0.1, max: 2.0 },        // $800 - $16,000
-    'MKR': { min: 0.5, max: 10.0 },       // $750 - $15,000
-    
+    'WETH': { min: 0.1, max: 5.0 },       // $300 - $15,000
+    'ETH': { min: 0.1, max: 5.0 },
+    'WBTC': { min: 0.005, max: 0.1 },     // $325 - $6,500
+    'YFI': { min: 0.05, max: 1.0 },       // $400 - $8,000
+    'MKR': { min: 0.2, max: 3.0 },        // $300 - $4,500
+
     // Mid-value tokens
-    'LINK': { min: 50, max: 1000 },       // $750 - $15,000
-    'UNI': { min: 100, max: 2000 },       // $700 - $14,000
-    'AAVE': { min: 5, max: 100 },         // $750 - $15,000
-    'COMP': { min: 20, max: 300 },        // $1,000 - $15,000
-    'SNX': { min: 500, max: 7500 },       // $1,000 - $15,000
-    'CRV': { min: 1000, max: 20000 },     // $500 - $10,000
-    
+    'LINK': { min: 20, max: 500 },        // $300 - $7,500
+    'UNI': { min: 50, max: 1000 },        // $350 - $7,000
+    'AAVE': { min: 2, max: 50 },          // $300 - $7,500
+    'COMP': { min: 10, max: 150 },        // $500 - $7,500
+    'SNX': { min: 200, max: 3000 },       // $400 - $6,000
+    'CRV': { min: 500, max: 10000 },      // $250 - $5,000
+
     // Stablecoins
-    'USDC': { min: 1000, max: 15000 },    // $1,000 - $15,000
-    'USDT': { min: 1000, max: 15000 },
-    'DAI': { min: 1000, max: 15000 },
-    'crvUSD': { min: 1000, max: 15000 },
-    
+    'USDC': { min: 500, max: 5000 },      // $500 - $5,000
+    'USDT': { min: 500, max: 5000 },
+    'DAI': { min: 500, max: 5000 },
+    'crvUSD': { min: 500, max: 5000 },
+
     // Low-value tokens
-    'MATIC': { min: 2000, max: 30000 },
-    'SHIB': { min: 50000000, max: 1000000000 },
-    
+    'MATIC': { min: 1000, max: 15000 },
+    'SHIB': { min: 20000000, max: 500000000 },
+
     // Default for unknown tokens
-    'DEFAULT': { min: 1000, max: 10000 }
+    'DEFAULT': { min: 500, max: 5000 }
   };
-  
+
   return constraints[tokenSymbol] || constraints['DEFAULT'];
 }
 

@@ -58,7 +58,7 @@ function calculateV2Liquidity(priceData) {
 function calculateV3Liquidity(priceData) {
   // V3 liquidity is the L value (sqrt(x*y))
   const L = new Decimal(priceData.liquidity || '0');
-  
+
   if (L.lte(0)) {
     return {
       token0Liquidity: '0',
@@ -72,16 +72,24 @@ function calculateV3Liquidity(priceData) {
   const priceAinB = new Decimal(priceData.priceOfAinB);
   const priceBinA = new Decimal(priceData.priceOfBinA);
 
+  // Get token decimals
+  const token0Decimals = priceData.tokenA.decimals;
+  const token1Decimals = priceData.tokenB.decimals;
+
   // For V3, virtual reserves at current price:
   // x (token0/tokenA) = L / sqrt(P)
   // y (token1/tokenB) = L * sqrt(P)
   // where P is price of token1 in terms of token0
 
   const sqrtPrice = priceBinA.sqrt(); // sqrt of (tokenA price in tokenB)
-  
-  // Calculate virtual reserves
-  const token0Reserve = L.div(sqrtPrice);
-  const token1Reserve = L.mul(sqrtPrice);
+
+  // Calculate virtual reserves in base units (Wei)
+  const token0ReserveWei = L.div(sqrtPrice);
+  const token1ReserveWei = L.mul(sqrtPrice);
+
+  // Convert from Wei to human-readable format
+  const token0Reserve = token0ReserveWei.div(new Decimal(10).pow(token0Decimals));
+  const token1Reserve = token1ReserveWei.div(new Decimal(10).pow(token1Decimals));
 
   return {
     token0Liquidity: token0Reserve.toString(),

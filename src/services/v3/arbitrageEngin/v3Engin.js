@@ -58,7 +58,7 @@ const PRIORITY_FEE = new Decimal('0.001'); // 0.1%
 const MIN_TRADE_SIZE = new Decimal('0.0001');
 
 // PROFIT THRESHOLDS (after gas costs, using Balancer free flash loans!)
-const MIN_PROFIT_THRESHOLD = new Decimal('0.002'); // 0.002 ETH minimum net profit (~$6) after gas
+const MIN_PROFIT_THRESHOLD = new Decimal('0.00001'); // 0.002 ETH minimum net profit (~$6) after gas
 const MIN_PROFIT_PERCENTAGE = new Decimal('0.003'); // 0.3% return minimum after gas costs
 const MAX_SLIPPAGE = new Decimal('0.03'); // 3% max slippage
 const MAX_GAS_PRICE_GWEI = 100; // 100 Gwei max gas price
@@ -2057,6 +2057,95 @@ async function getQuote(dexName, amountIn, tokenIn, tokenOut, fee = 3000) {
 //   return opportunities;
 // }
 
+/**
+ * ✅ SPREAD PRE-CHECK: Quick test with small amount to avoid expensive quote calls
+ * This saves RPC calls by detecting no-spread scenarios early
+ * @param {Object} buyPriceObj - Buy pool data
+ * @param {Object} sellPriceObj - Sell pool data
+ * @param {Object} tokenA - Token A data
+ * @param {Object} tokenB - Token B data
+ * @returns {Object} - { hasSpread: boolean, spreadPercent: number, reason: string }
+ */
+async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
+  const tokenBDecimals = normalizeDecimals(tokenB.decimals);
+  const tokenADecimals = normalizeDecimals(tokenA.decimals);
+  const testAmount = ethers.parseUnits('0.01', tokenBDecimals); // 0.01 of tokenB
+
+  try {
+    // Step 1: Get buy quote (tokenB → tokenA)
+    const platformFee1 = new Decimal(buyPriceObj.fee);
+    const step1Fee = buyPriceObj.dex.includes('V3')
+      ? Math.floor(platformFee1.mul(1000000).toNumber())
+      : 3000;
+
+    const buyOutput = await getQuote(
+      buyPriceObj.dex,
+      testAmount,
+      buyPriceObj.tokenB.address,
+      buyPriceObj.tokenA.address,
+      step1Fee
+    );
+
+    if (!buyOutput || buyOutput === 0n) {
+      return { hasSpread: false, reason: 'NO_BUY_QUOTE', spreadPercent: 0 };
+    }
+
+    // Step 2: Get sell quote (tokenA → tokenB)
+    const platformFee2 = new Decimal(sellPriceObj.fee);
+    const step2Fee = sellPriceObj.dex.includes('V3')
+      ? Math.floor(platformFee2.mul(1000000).toNumber())
+      : 3000;
+
+    const sellOutput = await getQuote(
+      sellPriceObj.dex,
+      buyOutput,
+      sellPriceObj.tokenA.address,
+      sellPriceObj.tokenB.address,
+      step2Fee
+    );
+
+    if (!sellOutput || sellOutput === 0n) {
+      return { hasSpread: false, reason: 'NO_SELL_QUOTE', spreadPercent: 0 };
+    }
+
+    // Calculate spread percentage
+    const ratio = Number(sellOutput) / Number(testAmount);
+    const spreadPercent = (ratio - 1) * 100;
+
+    // Check for pool errors (>10% loss indicates something wrong)
+    if (spreadPercent < -10) {
+      return {
+        hasSpread: false,
+        reason: 'POOL_ERROR',
+        spreadPercent
+      };
+    }
+
+    // Need at least 0.3% spread to potentially be profitable after fees & gas
+    const MIN_SPREAD_PERCENT = 0.3;
+    if (spreadPercent < MIN_SPREAD_PERCENT) {
+      return {
+        hasSpread: false,
+        reason: 'SPREAD_TOO_LOW',
+        spreadPercent
+      };
+    }
+
+    return {
+      hasSpread: true,
+      spreadPercent,
+      testOutput: sellOutput
+    };
+
+  } catch (error) {
+    return {
+      hasSpread: false,
+      reason: error.message || 'QUOTE_ERROR',
+      spreadPercent: 0
+    };
+  }
+}
+
 
 async function processDirectArbitragePool(poolName, prices) {
   const opportunities = [];
@@ -2081,30 +2170,39 @@ async function processDirectArbitragePool(poolName, prices) {
   const startTime = Date.now();
   const quotePairs = [];
 
-  for (let i = 0; i < prices.length - 1; i++) {
-    const buyPriceObj = prices[i];
-    const buyPriceAinB = new Decimal(buyPriceObj.priceOfAinB);
-    if (!buyPriceAinB.isFinite() || buyPriceAinB.lte(0)) continue;
+  // ✅ CHECK BOTH DIRECTIONS: Compare all pool pairs in both directions
+  for (let i = 0; i < prices.length; i++) {
+    const priceObj1 = prices[i];
+    const price1AinB = new Decimal(priceObj1.priceOfAinB);
+    if (!price1AinB.isFinite() || price1AinB.lte(0)) continue;
 
-    for (let j = i + 1; j < prices.length; j++) {
-      const sellPriceObj = prices[j];
-      if (buyPriceObj.dex === sellPriceObj.dex) continue;
+    for (let j = 0; j < prices.length; j++) {
+      // Skip same pool
+      if (i === j) continue;
+
+      const priceObj2 = prices[j];
+
+      // Skip same DEX
+      if (priceObj1.dex === priceObj2.dex) continue;
+
+      const price2AinB = new Decimal(priceObj2.priceOfAinB);
+      if (!price2AinB.isFinite() || price2AinB.lte(0)) continue;
 
       stats.totalCombinations++;
 
-      const sellPriceAinB = new Decimal(sellPriceObj.priceOfAinB);
-      if (!sellPriceAinB.isFinite() || sellPriceAinB.lte(0)) continue;
+      // Check if there's a price difference (spread)
+      // Direction: Buy from priceObj1, Sell to priceObj2
+      const spread = price2AinB.minus(price1AinB).div(price1AinB);
+      const minSpread = getMinSpreadForPair(priceObj1.tokenA, priceObj1.tokenB);
 
-      // Quick spread check
-      const spread = sellPriceAinB.minus(buyPriceAinB).div(buyPriceAinB);
-      const minSpread = getMinSpreadForPair(buyPriceObj.tokenA, buyPriceObj.tokenB);
-      if (spread.lte(minSpread)) break;
+      // Only proceed if spread is positive and meets minimum
+      if (spread.lte(minSpread)) continue;
 
       quotePairs.push({
-        buyPriceObj,
-        sellPriceObj,
-        buyPriceAinB,
-        sellPriceAinB,
+        buyPriceObj: priceObj1,
+        sellPriceObj: priceObj2,
+        buyPriceAinB: price1AinB,
+        sellPriceAinB: price2AinB,
         pairIndex: `${i},${j}`
       });
     }
@@ -2130,6 +2228,27 @@ async function processDirectArbitragePool(poolName, prices) {
       const tokenBDecimals = normalizeDecimals(buyPriceObj.tokenB.decimals);
 
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ✅ SPREAD PRE-CHECK: Quick test to avoid expensive full quotes
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      console.log(`\n   🔄 Testing: ${buyPriceObj.dex} → ${sellPriceObj.dex}`);
+
+      const spreadCheck = await checkSpreadExists(
+        buyPriceObj,
+        sellPriceObj,
+        buyPriceObj.tokenA,
+        buyPriceObj.tokenB
+      );
+
+      if (!spreadCheck.hasSpread) {
+        console.log(`   ⏭️ Skip: ${spreadCheck.reason} (${spreadCheck.spreadPercent.toFixed(3)}%)`);
+        stats.unprofitableSkipped++;
+        return null;
+      }
+
+      console.log(`   ✅ Spread found: ${spreadCheck.spreadPercent.toFixed(3)}%`);
+
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       // ✅ SAFE INPUT AMOUNT CALCULATION BASED ON BOTH POOLS
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2139,11 +2258,11 @@ async function processDirectArbitragePool(poolName, prices) {
 
       // Skip if pools have insufficient liquidity
       if (!inputAmountHuman || inputAmountHuman === null) {
-        console.log(`⏭️ Skipping ${poolName} due to insufficient liquidity in buy or sell pool`);
+        console.log(`   ⏭️ Skip: Could not calculate safe amount (insufficient liquidity)`);
         return null;
       }
 
-      console.log(`💰 ${poolName} - Using safe input: ${inputAmountHuman.toFixed(4)} ${tokenB}`);
+      console.log(`   💰 Using safe input: ${inputAmountHuman.toFixed(4)} ${tokenB}`);
 
       const inputAmountWei = ethers.parseUnits(inputAmountHuman.toString(), tokenBDecimals);
 
@@ -2229,29 +2348,23 @@ async function processDirectArbitragePool(poolName, prices) {
         return null;
       }
 
-      // ✅ Enhanced logging with liquidity context
-      console.log('💰 Calculation Check:', {
-        tokenB: `${tokenB} (${tokenBDecimals} decimals)`,
-        tokenA: `${tokenA} (${tokenADecimals} decimals)`,
-        inputAmount: {
-          wei: inputAmountWei.toString(),
-          human: ethers.formatUnits(inputAmountWei, tokenBDecimals),
-          token: tokenB,
-          liquidityPercentage: `${(new Decimal(inputAmountHuman.toString()).div(buyPriceObj.liquidityInTokenB).mul(100)).toFixed(2)}%`
-        },
-        step1Output: {
-          wei: step1Output.toString(),
-          human: ethers.formatUnits(step1Output, tokenADecimals),
-          token: tokenA,
-          dex: buyPriceObj.dex
-        },
-        step2Output: {
-          wei: step2Output.toString(),
-          human: ethers.formatUnits(step2Output, tokenBDecimals),
-          token: tokenB,
-          dex: sellPriceObj.dex
-        }
-      });
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ✅ DETAILED TRADE SIMULATION LOGGING
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      console.log(`\n   📊 Full Simulation: ${ethers.formatUnits(inputAmountWei, tokenBDecimals)} ${tokenB}`);
+
+      // Calculate prices
+      const buyPrice = Number(step1Output) / Number(inputAmountWei);
+      const sellPrice = Number(step1Output) / Number(step2Output);
+
+      console.log(`   📥 Buy:  ${ethers.formatUnits(inputAmountWei, tokenBDecimals)} ${tokenB} → ${ethers.formatUnits(step1Output, tokenADecimals)} ${tokenA}`);
+      console.log(`      DEX: ${buyPriceObj.dex}`);
+      console.log(`      Price: ${buyPrice.toFixed(6)} ${tokenA}/${tokenB}`);
+
+      console.log(`   📤 Sell: ${ethers.formatUnits(step1Output, tokenADecimals)} ${tokenA} → ${ethers.formatUnits(step2Output, tokenBDecimals)} ${tokenB}`);
+      console.log(`      DEX: ${sellPriceObj.dex}`);
+      console.log(`      Price: ${sellPrice.toFixed(6)} ${tokenA}/${tokenB}`);
 
       // ✅ VALIDATION: Reject absurd price ratios
       const outputInputRatio = new Decimal(step2Output.toString()).div(new Decimal(inputAmountWei.toString()));
@@ -2278,8 +2391,13 @@ async function processDirectArbitragePool(poolName, prices) {
         return null;
       }
 
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ✅ DETAILED PROFIT CALCULATION
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
       // Calculate gross profit (output - input)
       const grossProfit = new Decimal(step2Output.toString()).minus(new Decimal(inputAmountWei.toString()));
+      const grossProfitPercent = grossProfit.div(new Decimal(inputAmountWei.toString())).mul(100);
 
       // Estimate gas cost in tokenB (conservative estimate for Balancer flash loan arbitrage)
       const gasEstimateEth = new Decimal('0.003'); // ~0.003 ETH for arbitrage tx (~$9 at current prices)
@@ -2297,21 +2415,23 @@ async function processDirectArbitragePool(poolName, prices) {
 
       // Calculate net profit = gross profit - gas cost (NO flash loan fee with Balancer!)
       const netProfit = grossProfit.minus(gasCostInTokenB.toString());
+      const netProfitPercent = netProfit.div(new Decimal(inputAmountWei.toString())).mul(100);
+
+      console.log(`\n   💰 Profit Analysis:`);
+      console.log(`      Input:        ${ethers.formatUnits(inputAmountWei, tokenBDecimals)} ${tokenB}`);
+      console.log(`      Output:       ${ethers.formatUnits(step2Output, tokenBDecimals)} ${tokenB}`);
+      console.log(`      Gross Profit: ${ethers.formatUnits(grossProfit.toString(), tokenBDecimals)} ${tokenB} (${grossProfitPercent.toFixed(3)}%)`);
+      console.log(`      Gas Cost:     ${ethers.formatUnits(gasCostInTokenB.toString(), tokenBDecimals)} ${tokenB}`);
+      console.log(`      Net Profit:   ${ethers.formatUnits(netProfit.toString(), tokenBDecimals)} ${tokenB} (${netProfitPercent.toFixed(3)}%)`);
 
       // Reject if not profitable after gas costs
       if (netProfit.lte(0)) {
-        console.log(`❌ Unprofitable after gas cost (${pairIndex}): ${poolName}`);
-        console.log(`   Gross Profit: ${ethers.formatUnits(grossProfit.toString(), tokenBDecimals)} ${tokenB}`);
-        console.log(`   Gas Cost: ${ethers.formatUnits(gasCostInTokenB.toString(), tokenBDecimals)} ${tokenB}`);
-        console.log(`   Net Profit: ${ethers.formatUnits(netProfit.toString(), tokenBDecimals)} ${tokenB}`);
+        console.log(`   ❌ NOT PROFITABLE (net profit <= 0)`);
         stats.unprofitableSkipped++;
         return null;
       }
 
-      console.log(`\n🔹 Potential Opportunity Detected (${pairIndex}): ${poolName}`);
-      console.log(`   Gross Profit (wei): ${grossProfit.toString()}`);
-      console.log(`   Gas Cost (wei): ${gasCostInTokenB.toString()}`);
-      console.log(`   Net Profit (wei): ${netProfit.toString()}`);
+      console.log(`   ✅ PROFITABLE OPPORTUNITY!`);
 
       stats.profitableFound++;
 

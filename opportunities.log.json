@@ -1,0 +1,154 @@
+[
+  {
+    "id": "opp_1763958223945_us88vf0_z5tae0",
+    "type": "v3_direct",
+    "timestamp": 1764150329926,
+    "estimated_profit": "140399490299301",
+    "execution_payload": {
+      "path": [
+        {
+          "router": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "dexType": "0",
+          "fee": "0",
+          "minAmountOut": "2755149419"
+        },
+        {
+          "router": "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "dexType": "1",
+          "fee": "500",
+          "minAmountOut": "980137591500493315"
+        }
+      ],
+      "loanToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "loanAmount": "1000000000000000000",
+      "amountIn": "1000000000000000000",
+      "minProfit": "5000000000000000",
+      "deadline": "1763958515"
+    },
+    "pair": "unknown",
+    "buyDex": "UniswapV2",
+    "sellDex": "PancakeswapV3_500",
+    "txHash": "0x0",
+    "buyPoolAddress": "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852",
+    "sellPoolAddress": "0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C",
+    "amountIn": "1000000000000000000",
+    "amountOut": "1000140399490299301",
+    "path": "WETH->USDT->WETH",
+    "tokenA": "{\"symbol\":\"USDT\",\"address\":\"0xdAC17F958D2ee523a2206206994597C13D831ec7\",\"decimals\":6}",
+    "tokenB": "{\"symbol\":\"WETH\",\"address\":\"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"decimals\":18}",
+    "gasEstimation": "0",
+    "priorityFee": "0",
+    "spread": "0",
+    "actualProfit": "-937826490778998",
+    "actualProfitPercent": -0.09378264907789981,
+    "gasCost": "157649833600000",
+    "minProfitRequired": "472949500800000",
+    "gasPriceUsed": "394124584"
+  },
+  {
+    "id": "opp_1763958223938_v59xurx_oxy6bh",
+    "type": "v3_direct",
+    "timestamp": 1764150329926,
+    "estimated_profit": "140399490299301",
+    "execution_payload": {
+      "path": [
+        {
+          "router": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "dexType": "0",
+          "fee": "0",
+          "minAmountOut": "2755149419"
+        },
+        {
+          "router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "dexType": "1",
+          "fee": "500",
+          "minAmountOut": "979080930039036582"
+        }
+      ],
+      "loanToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "loanAmount": "1000000000000000000",
+      "amountIn": "1000000000000000000",
+      "minProfit": "5000000000000000",
+      "deadline": "1763958527"
+    },
+    "pair": "unknown",
+    "buyDex": "UniswapV2",
+    "sellDex": "SushiswapV3_500",
+    "txHash": "0x0",
+    "buyPoolAddress": "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852",
+    "sellPoolAddress": "0x72c2178E082feDB13246877B5aA42ebcE1b72218",
+    "amountIn": "1000000000000000000",
+    "amountOut": "1000140399490299301",
+    "path": "WETH->USDT->WETH",
+    "tokenA": "{\"symbol\":\"USDT\",\"address\":\"0xdAC17F958D2ee523a2206206994597C13D831ec7\",\"decimals\":6}",
+    "tokenB": "{\"symbol\":\"WETH\",\"address\":\"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"decimals\":18}",
+    "gasEstimation": "0",
+    "priorityFee": "0",
+    "spread": "0",
+    "actualProfit": "-937826490778998",
+    "actualProfitPercent": -0.09378264907789981,
+    "gasCost": "157649833600000",
+    "minProfitRequired": "472949500800000",
+    "gasPriceUsed": "394124584"
+  },
+  {
+    "id": "opp_1763958223930_8eonzvy_muewqf",
+    "type": "v3_direct",
+    "timestamp": 1764054840067,
+    "estimated_profit": "140399490299301",
+    "execution_payload": {
+      "path": [
+        {
+          "router": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "dexType": "0",
+          "fee": "0",
+          "minAmountOut": "2755149419"
+        },
+        {
+          "router": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "dexType": "1",
+          "fee": "500",
+          "minAmountOut": "979080930039036582"
+        }
+      ],
+      "loanToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "loanAmount": "1000000000000000000",
+      "amountIn": "1000000000000000000",
+      "minProfit": "5000000000000000",
+      "deadline": "1763958527"
+    },
+    "pair": "unknown",
+    "buyDex": "UniswapV2",
+    "sellDex": "UniswapV3_500",
+    "txHash": "0x0",
+    "buyPoolAddress": "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852",
+    "sellPoolAddress": "0x11b815efB8f581194ae79006d24E0d814B7697F6",
+    "amountIn": "1000000000000000000",
+    "amountOut": "1000140399490299301",
+    "path": "WETH->USDT->WETH",
+    "tokenA": "{\"symbol\":\"USDT\",\"address\":\"0xdAC17F958D2ee523a2206206994597C13D831ec7\",\"decimals\":6}",
+    "tokenB": "{\"symbol\":\"WETH\",\"address\":\"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"decimals\":18}",
+    "gasEstimation": "0",
+    "priorityFee": "0",
+    "spread": "0",
+    "actualProfit": "-937826490778998",
+    "actualProfitPercent": -0.09378264907789981,
+    "gasCost": "157649833600000",
+    "minProfitRequired": "472949500800000",
+    "gasPriceUsed": "394124584"
+  }
+
+  
+]

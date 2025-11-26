@@ -1,0 +1,84 @@
+{
+  "name": "arbitrage-bot-backend",
+  "version": "1.0.0",
+  "description": "Production-ready arbitrage trading bot backend with Flashbot integration",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "nodemon src/main.js",
+    "test": "jest",
+    "test:db": "node scripts/test-db.js",
+    "test:api": "node scripts/test-api.js",
+    "test:arbitrage": "node scripts/test-arbitrage.js",
+    "test:execution": "node scripts/test-execution.js",
+    "test:units": "node scripts/test-unit-conversions.js",
+    "test:detection": "node scripts/test-opportunity-detection.js",
+    "init-db": "node scripts/init_db.js",
+    "integrate-flashbot": "node scripts/integrate-flashbot.js",
+    "test-integration": "node scripts/test-integration.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "build": "echo 'No build step required for Node.js'",
+    "deploy:prod": "bash scripts/deploy-production.sh",
+    "monitor": "node scripts/monitor.js"
+  },
+  "keywords": [
+    "arbitrage",
+    "trading",
+    "bot",
+    "defi",
+    "ethereum",
+    "flashbots",
+    "mev",
+    "cryptocurrency"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@flashbots/ethers-provider-bundle": "^1.0.0",
+    "@uniswap/v2-sdk": "^4.16.0",
+    "@uniswap/v3-sdk": "^3.25.2",
+    "axios": "^1.11.0",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^17.2.1",
+    "ethers": "^6.13.2",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.8.0",
+    "joi": "^18.0.0",
+    "lodash": "^4.17.21",
+    "moment": "^2.30.1",
+    "morgan": "^1.10.1",
+    "node-cron": "^3.0.3",
+    "pg": "^8.16.3",
+    "socket.io": "^4.8.1",
+    "winston": "^3.17.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "jest": "^30.0.5",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/arbitrage-trading-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/arbitrage-trading-bot/issues"
+  },
+  "homepage": "https://github.com/yourusername/arbitrage-trading-bot#readme"
+}

@@ -72,16 +72,38 @@ function calculateV3Liquidity(priceData) {
   const priceAinB = new Decimal(priceData.priceOfAinB);
   const priceBinA = new Decimal(priceData.priceOfBinA);
 
+  // ✅ VALIDATION: Check for valid prices
+  if (!priceAinB.isFinite() || priceAinB.lte(0) || !priceBinA.isFinite() || priceBinA.lte(0)) {
+    return {
+      token0Liquidity: '0',
+      token1Liquidity: '0',
+      liquidityInTokenA: '0',
+      liquidityInTokenB: '0'
+    };
+  }
+
   // Get token decimals
   const token0Decimals = priceData.tokenA.decimals;
   const token1Decimals = priceData.tokenB.decimals;
 
   // For V3, virtual reserves at current price:
+  // NOTE: This is a SIMPLIFIED approximation
+  // Actual V3 uses concentrated liquidity with tick ranges
   // x (token0/tokenA) = L / sqrt(P)
   // y (token1/tokenB) = L * sqrt(P)
   // where P is price of token1 in terms of token0
 
   const sqrtPrice = priceBinA.sqrt(); // sqrt of (tokenA price in tokenB)
+
+  // ✅ VALIDATION: Prevent division by zero or extremely small values
+  if (sqrtPrice.lte(0) || sqrtPrice.lt('0.000001')) {
+    return {
+      token0Liquidity: '0',
+      token1Liquidity: '0',
+      liquidityInTokenA: '0',
+      liquidityInTokenB: '0'
+    };
+  }
 
   // Calculate virtual reserves in base units (Wei)
   const token0ReserveWei = L.div(sqrtPrice);
@@ -91,12 +113,86 @@ function calculateV3Liquidity(priceData) {
   const token0Reserve = token0ReserveWei.div(new Decimal(10).pow(token0Decimals));
   const token1Reserve = token1ReserveWei.div(new Decimal(10).pow(token1Decimals));
 
+  // ✅ SANITY CHECK: Detect unrealistic liquidity values
+  // NOTE: For high-decimal tokens (SHIB, PEPE), reserves can be huge in token units
+  // We check both absolute values and USD-equivalent values
+
+  // Absolute check - adjust based on decimals
+  const maxAbsoluteByDecimals = new Decimal(10).pow(token0Decimals + 15); // Very generous
+  const maxAbsoluteByDecimals1 = new Decimal(10).pow(token1Decimals + 15);
+
+  if (token0Reserve.gt(maxAbsoluteByDecimals) || token1Reserve.gt(maxAbsoluteByDecimals1)) {
+    console.warn(`⚠️ Unrealistic V3 liquidity detected for ${priceData.poolName}: tokenA=${token0Reserve.toExponential(2)}, tokenB=${token1Reserve.toExponential(2)}`);
+    console.warn(`   L=${L.toExponential(2)}, sqrtPrice=${sqrtPrice.toString()}, priceAinB=${priceAinB.toString()}`);
+
+    // Return zero to skip this pool - liquidity calculation is unreliable
+    return {
+      token0Liquidity: '0',
+      token1Liquidity: '0',
+      liquidityInTokenA: '0',
+      liquidityInTokenB: '0',
+      warning: 'Calculation produced unrealistic values'
+    };
+  }
+
+  // Additional USD-value check: If one reserve is tiny and the other is huge,
+  // it suggests a calculation error
+  if (token0Reserve.gt(0) && token1Reserve.gt(0)) {
+    const usdValueRatio = token0Reserve.mul(priceAinB).div(token1Reserve);
+    // USD values should be within 1000x of each other in a real pool
+    if (usdValueRatio.lt('0.001') || usdValueRatio.gt('1000')) {
+      // This will be caught by the ratio check below, so just debug log
+      console.debug(`  ℹ️  V3 pool ${priceData.poolName} has imbalanced USD values: ratio=${usdValueRatio.toExponential(2)}`);
+    }
+  }
+
+  // ✅ RELAXED VALIDATION: Check if reserves make sense with price
+  // NOTE: For tokens with extreme decimal/price differences (SHIB, PEPE),
+  // the simplified V3 formula can produce very large ratios
+  // We use actual quotes for trading, so liquidity is just for filtering
+  const expectedToken1 = token0Reserve.mul(priceAinB);
+  const ratio = token1Reserve.div(expectedToken1);
+
+  // Calculate decimal difference between tokens
+  const decimalDiff = Math.abs(token0Decimals - token1Decimals);
+
+  // Adjust tolerance based on decimal difference
+  // For extreme cases (12+ decimal diff like SHIB/USDC), allow huge variance
+  let minRatio, maxRatio;
+  if (decimalDiff >= 12) {
+    minRatio = '1e-30';  // Extremely lenient for high decimal diff tokens
+    maxRatio = '1e30';
+  } else if (decimalDiff >= 6) {
+    minRatio = '1e-15';  // Very lenient for medium decimal diff
+    maxRatio = '1e15';
+  } else {
+    minRatio = '0.001';  // Standard tolerance for similar decimals
+    maxRatio = '1000';
+  }
+
+  if (ratio.lt(minRatio) || ratio.gt(maxRatio)) {
+    // For extreme mismatches, just warn but don't filter out
+    // The quote validation in checkSpreadExists will catch real issues
+    if (ratio.lt('1e-50') || ratio.gt('1e50')) {
+      console.warn(`⚠️ Extreme V3 liquidity mismatch for ${priceData.poolName}: ratio=${ratio.toExponential(2)}`);
+      return {
+        token0Liquidity: '0',
+        token1Liquidity: '0',
+        liquidityInTokenA: '0',
+        liquidityInTokenB: '0',
+        warning: 'Extreme liquidity-price mismatch'
+      };
+    }
+    // Moderate mismatch - just log but allow
+    console.debug(`  ℹ️  V3 liquidity approximation variance for ${priceData.poolName}: ratio=${ratio.toExponential(2)}`);
+  }
+
   return {
     token0Liquidity: token0Reserve.toString(),
     token1Liquidity: token1Reserve.toString(),
     liquidityInTokenA: token0Reserve.toString(),
     liquidityInTokenB: token1Reserve.toString(),
-    note: 'V3 uses concentrated liquidity - these are virtual reserves at current price'
+    note: 'V3 simplified approximation - actual liquidity depends on tick ranges'
   };
 }
 

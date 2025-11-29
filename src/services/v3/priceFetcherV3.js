@@ -15,7 +15,7 @@ class DEXPriceFetcherV3 {
     this.name = name;
     this.provider = provider;
     
-    this.quoter = new ethers.Contract('0x61fFE014bA17989E743c5F6cB21bF9697530B21e', QuoterV2.abi, this.provider);
+    this.quoter = new ethers.Contract(quoterAddress, QuoterV2.abi, this.provider);
   }
 
  // Fixed V3 getPricesBatched function

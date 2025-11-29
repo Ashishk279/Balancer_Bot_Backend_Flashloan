@@ -32,7 +32,9 @@ let priceFetcherV3 = null;
 let priceFetcher = null;
 let priceFeed = null;
 
-const quoterAddress = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e';
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ REMOVED: Single quoter address - now using DEX-specific quoters below
+// ═══════════════════════════════════════════════════════════════════════
 const dexName = 'UniswapV3';
 
 /**
@@ -45,7 +47,12 @@ function initializeProvider(provider) {
   }
 
   wsProvider = provider;
-  priceFetcherV3 = new DEXPriceFetcherV3(quoterAddress, dexName, wsProvider);
+
+  // ✅ Use Uniswap V3 quoter for the main price fetcher
+  // Note: DEXPriceFetcherV3 is only used for initial price fetching (Uniswap V3)
+  // Individual quotes use DEX-specific quoters via getQuote()
+  const uniswapV3Quoter = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e';
+  priceFetcherV3 = new DEXPriceFetcherV3(uniswapV3Quoter, dexName, wsProvider);
   priceFetcher = new PriceFetcher(wsProvider);
   priceFeed = initializePriceFeed(wsProvider);
 
@@ -56,7 +63,7 @@ function initializeProvider(provider) {
 const BATCH_SIZE = 10; // Increased for better parallelization
 const INPUT_AMOUNT = new Decimal('5');
 const MIN_LIQUIDITY = new Decimal('50000');
-const MIN_LIQUIDITY_USD = ethers.parseUnits('5000', 6); // $100K minimum liquidity in USDC
+const MIN_LIQUIDITY_USD = ethers.parseUnits('10000', 6); // $100K minimum liquidity in USDC
 const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
@@ -94,19 +101,62 @@ let allPrices = [];
 
 
 
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ DEX ADDRESSES - CRITICAL: Each V3 DEX has its OWN quoter!
+// ═══════════════════════════════════════════════════════════════════════
 const DEX_ADDRESSES = {
+  // Uniswap V3 (all fee tiers use same factory and quoter)
   UniswapV3: {
     factory_address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    quoter_address: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",  // QuoterV2
+    quoter_v1_address: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6" // QuoterV1 (fallback)
   },
   UniswapV3_500: {
     factory_address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    quoter_address: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
   },
   UniswapV3_3000: {
     factory_address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    quoter_address: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
   },
   UniswapV3_10000: {
     factory_address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    quoter_address: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
   },
+
+  // Sushiswap V3 - DIFFERENT quoter than Uniswap!
+  SushiswapV3: {
+    factory_address: "0xbACEB8eC6b9355Dfc0269C18bac9d6E2Bdc29C4F",
+    quoter_address: "0x64e8802FE490fa7cc61d3463958199161Bb608A7"
+  },
+  SushiswapV3_500: {
+    factory_address: "0xbACEB8eC6b9355Dfc0269C18bac9d6E2Bdc29C4F",
+    quoter_address: "0x64e8802FE490fa7cc61d3463958199161Bb608A7"
+  },
+  SushiswapV3_3000: {
+    factory_address: "0xbACEB8eC6b9355Dfc0269C18bac9d6E2Bdc29C4F",
+    quoter_address: "0x64e8802FE490fa7cc61d3463958199161Bb608A7"
+  },
+  SushiswapV3_10000: {
+    factory_address: "0xbACEB8eC6b9355Dfc0269C18bac9d6E2Bdc29C4F",
+    quoter_address: "0x64e8802FE490fa7cc61d3463958199161Bb608A7"
+  },
+
+  // PancakeSwap V3 - DIFFERENT quoter than Uniswap!
+  PancakeswapV3: {
+    factory_address: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
+    quoter_address: "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997"
+  },
+  PancakeswapV3_500: {
+    factory_address: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
+    quoter_address: "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997"
+  },
+  PancakeswapV3_2500: {
+    factory_address: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
+    quoter_address: "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997"
+  },
+
+  // V2 DEXes
   UniswapV2: {
     router_address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
     factory_address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
@@ -1495,8 +1545,19 @@ async function getV2Quote(routerAddress, amountIn, tokenIn, tokenOut) {
 /**
  * Helper function to get V3 quote from quoter
  */
-async function getV3Quote(amountIn, tokenIn, tokenOut, fee) {
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ FIXED getV3Quote() - Takes quoter address as parameter
+// ═══════════════════════════════════════════════════════════════════════
+async function getV3Quote(quoterAddress, amountIn, tokenIn, tokenOut, fee) {
+  // ✅ Validate fee tier
+  const validFees = [100, 500, 2500, 3000, 10000];
+  if (!validFees.includes(fee)) {
+    console.log(`   ⚠️ Invalid fee tier: ${fee}, using 3000`);
+    fee = 3000;
+  }
+
   try {
+    // Try QuoterV2 first (newer, more accurate)
     const quoter = new ethers.Contract(
       quoterAddress,
       ['function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96)) external returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)'],
@@ -1512,9 +1573,32 @@ async function getV3Quote(amountIn, tokenIn, tokenOut, fee) {
     };
 
     const result = await quoter.quoteExactInputSingle.staticCall(params);
+
+    // ✅ Validate result
+    if (!result || !result[0] || result[0] === 0n) {
+      return null;
+    }
+
     return result[0]; // Return amountOut
+
   } catch (error) {
-    // console.error(`V3 quote failed: ${error.message}`);
+    // Try QuoterV1 as fallback (for Uniswap only)
+    if (DEX_ADDRESSES.UniswapV3.quoter_v1_address && quoterAddress === DEX_ADDRESSES.UniswapV3.quoter_address) {
+      try {
+        const quoterV1 = new ethers.Contract(
+          DEX_ADDRESSES.UniswapV3.quoter_v1_address,
+          ['function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)'],
+          wsProvider
+        );
+
+        const result = await quoterV1.quoteExactInputSingle.staticCall(
+          tokenIn, tokenOut, fee, amountIn, 0
+        );
+        return result || null;
+      } catch (e) {
+        return null;
+      }
+    }
     return null;
   }
 }
@@ -1537,22 +1621,77 @@ function normalizeAmount(amount, fromDecimals, toDecimals) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ FIXED getQuote() - Routes to correct quoter per DEX
+// ═══════════════════════════════════════════════════════════════════════
 async function getQuote(dexName, amountIn, tokenIn, tokenOut, fee = 3000) {
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ✅ INPUT VALIDATION
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (!amountIn || amountIn === 0n) {
+    return null;
+  }
+
+  if (!tokenIn || !tokenOut) {
+    console.log(`   ⚠️ Missing token address`);
+    return null;
+  }
+
+  if (tokenIn.toLowerCase() === tokenOut.toLowerCase()) {
+    return null;
+  }
+
   try {
+    let output = null;
+
     if (dexName.includes('V3')) {
-      return await getV3Quote(amountIn, tokenIn, tokenOut, fee);
-    } else {
-      // V2
-      let routerAddress;
-      if (dexName.includes('Uniswap')) {
-        routerAddress = DEX_ADDRESSES.UniswapV2.router_address;
-      } else if (dexName.includes('Sushiswap')) {
-        routerAddress = DEX_ADDRESSES.SushiswapV2.router_address;
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ✅ V3: Use DEX-SPECIFIC quoter
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      let quoterAddress;
+
+      if (dexName.includes('Sushiswap')) {
+        quoterAddress = DEX_ADDRESSES.SushiswapV3?.quoter_address || DEX_ADDRESSES.SushiswapV3_3000?.quoter_address;
+      } else if (dexName.includes('Pancakeswap')) {
+        quoterAddress = DEX_ADDRESSES.PancakeswapV3?.quoter_address || DEX_ADDRESSES.PancakeswapV3_500?.quoter_address;
       } else {
-        routerAddress = DEX_ADDRESSES.UniswapV2.router_address; // Default
+        // Default to Uniswap V3
+        quoterAddress = DEX_ADDRESSES.UniswapV3?.quoter_address || DEX_ADDRESSES.UniswapV3_3000?.quoter_address;
       }
-      return await getV2Quote(routerAddress, amountIn, tokenIn, tokenOut);
+
+      if (!quoterAddress) {
+        console.log(`   ⚠️ No quoter address found for ${dexName}`);
+        return null;
+      }
+
+      output = await getV3Quote(quoterAddress, amountIn, tokenIn, tokenOut, fee);
+
+    } else {
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // V2: Use correct router
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      let routerAddress;
+
+      if (dexName.includes('Sushiswap')) {
+        routerAddress = DEX_ADDRESSES.SushiswapV2.router_address;
+      } else if (dexName.includes('Pancakeswap')) {
+        routerAddress = DEX_ADDRESSES.PancakeSwap.router_address;
+      } else {
+        routerAddress = DEX_ADDRESSES.UniswapV2.router_address;
+      }
+
+      output = await getV2Quote(routerAddress, amountIn, tokenIn, tokenOut);
     }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✅ FINAL VALIDATION
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if (!output || output === 0n) {
+      return null;
+    }
+
+    return output;
+
   } catch (error) {
     return null;
   }
@@ -2089,23 +2228,51 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
   const tokenBDecimals = normalizeDecimals(tokenB.decimals);
   const tokenADecimals = normalizeDecimals(tokenA.decimals);
 
-  // Use realistic test amount (~$100 equivalent) for accurate spread estimation
-  // Stablecoins: $100, ETH/WETH: ~0.03 ETH (~$100)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ✅ CRITICAL FIX: Validate token addresses match
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // Ensure both pools have the same token pair (even if in different order)
+  const buyTokens = new Set([
+    buyPriceObj.tokenA.address.toLowerCase(),
+    buyPriceObj.tokenB.address.toLowerCase()
+  ]);
+  const sellTokens = new Set([
+    sellPriceObj.tokenA.address.toLowerCase(),
+    sellPriceObj.tokenB.address.toLowerCase()
+  ]);
+
+  const tokensMatch =
+    buyTokens.has(tokenA.address.toLowerCase()) &&
+    buyTokens.has(tokenB.address.toLowerCase()) &&
+    sellTokens.has(tokenA.address.toLowerCase()) &&
+    sellTokens.has(tokenB.address.toLowerCase());
+
+  if (!tokensMatch) {
+    return {
+      hasSpread: false,
+      reason: 'TOKEN_MISMATCH',
+      spreadPercent: 0
+    };
+  }
+
+  // Use realistic test amount (~$1000 equivalent) for accurate spread estimation
   let testAmount;
   if (tokenB.symbol === 'USDT' || tokenB.symbol === 'USDC' || tokenB.symbol === 'DAI') {
-    testAmount = ethers.parseUnits('1000', tokenBDecimals); // $100 for stablecoins
+    testAmount = ethers.parseUnits('1000', tokenBDecimals); // $1000 for stablecoins
   } else if (tokenB.symbol === 'WETH' || tokenB.symbol === 'ETH') {
-    testAmount = ethers.parseUnits('1', tokenBDecimals); // ~$100 for ETH
+    testAmount = ethers.parseUnits('1', tokenBDecimals); // 1 ETH
   } else if(tokenB.symbol === 'WBTC') {
-    testAmount = ethers.parseUnits('0.002', tokenBDecimals); // ~$100 for WBTC
+    testAmount = ethers.parseUnits('0.01', tokenBDecimals); // 0.01 BTC
   } else if (tokenB.symbol === 'LINK') {
-    testAmount = ethers.parseUnits('100', tokenBDecimals); // ~$100 for LINK
-  }else {
-    testAmount = ethers.parseUnits('100', tokenBDecimals); // Default for other tokens
+    testAmount = ethers.parseUnits('100', tokenBDecimals); // 100 LINK
+  } else {
+    testAmount = ethers.parseUnits('100', tokenBDecimals); // Default
   }
 
   try {
-    // Step 1: Get buy quote (tokenB → tokenA)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Step 1: Buy tokenA with tokenB
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const platformFee1 = new Decimal(buyPriceObj.fee);
     const step1Fee = buyPriceObj.dex.includes('V3')
       ? Math.floor(platformFee1.mul(1000000).toNumber())
@@ -2123,30 +2290,74 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
       return { hasSpread: false, reason: 'NO_BUY_QUOTE', spreadPercent: 0 };
     }
 
-    // Step 2: Get sell quote (tokenA → tokenB)
+    // ✅ RELAXED SANITY CHECK: Only reject if buy output is completely absurd
+    // Note: For extreme price differences (SHIB, PEPE), output can be 10^12+ times input
+    // We rely on the "extreme loss" check later to catch real errors
+    const decimalDiff = Math.abs(tokenADecimals - tokenBDecimals);
+    const priceAdjustment = decimalDiff >= 12 ? 20 : (decimalDiff >= 6 ? 12 : 8);
+    const maxReasonableBuyOutput = testAmount * BigInt(10 ** priceAdjustment);
+
+    if (buyOutput > maxReasonableBuyOutput) {
+      console.log(`   ⚠️ Suspicious buy output: ${buyOutput.toString().substring(0, 20)}... (testAmount: ${testAmount})`);
+      return { hasSpread: false, reason: 'INVALID_BUY_OUTPUT', spreadPercent: 0 };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Step 2: Sell tokenA to get tokenB back
+    // ✅ CRITICAL FIX: Use tokenA/tokenB addresses, NOT sellPriceObj tokens
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const platformFee2 = new Decimal(sellPriceObj.fee);
     const step2Fee = sellPriceObj.dex.includes('V3')
       ? Math.floor(platformFee2.mul(1000000).toNumber())
       : 3000;
 
+    // Use the SAME token addresses as defined by buyPriceObj (tokenA and tokenB params)
+    // NOT sellPriceObj.tokenA/tokenB which might be in different order!
     const sellOutput = await getQuote(
       sellPriceObj.dex,
       buyOutput,
-      sellPriceObj.tokenA.address,
-      sellPriceObj.tokenB.address,
+      tokenA.address,  // ✅ FIX: Use parameter tokenA, not sellPriceObj.tokenA
+      tokenB.address,  // ✅ FIX: Use parameter tokenB, not sellPriceObj.tokenB
       step2Fee
     );
 
     if (!sellOutput || sellOutput === 0n) {
       return { hasSpread: false, reason: 'NO_SELL_QUOTE', spreadPercent: 0 };
     }
-   
-    console.log(`   Test Quotes: Buy Output = ${sellOutput}, ${testAmount}`);
+
+    // ✅ SANITY CHECK: Sell output should be reasonably close to testAmount
+    // After a roundtrip (tokenB → tokenA → tokenB), we expect to get back ~testAmount
+    // Allow up to 10x profit (1000%) - anything more is likely a quote error
+    // The "extreme loss" check below handles the lower bound
+    const maxReasonableSellOutput = testAmount * BigInt(10);
+    if (sellOutput > maxReasonableSellOutput) {
+      console.log(`   ⚠️ Suspicious sell output: ${sellOutput.toString().substring(0, 20)}... (testAmount: ${testAmount}), ratio: ${Number(sellOutput) / Number(testAmount)}x`);
+      return { hasSpread: false, reason: 'INVALID_SELL_OUTPUT', spreadPercent: 0 };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✅ ENHANCED LOGGING: Show complete quote flow
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const testAmountHuman = ethers.formatUnits(testAmount, tokenBDecimals);
+    const buyOutputHuman = ethers.formatUnits(buyOutput, tokenADecimals);
+    const sellOutputHuman = ethers.formatUnits(sellOutput, tokenBDecimals);
+
+    console.log(`   📊 Quote Flow: ${testAmountHuman} ${tokenB.symbol} → ${buyOutputHuman} ${tokenA.symbol} → ${sellOutputHuman} ${tokenB.symbol}`);
+
     // Calculate spread percentage
     const ratio = Number(sellOutput) / Number(testAmount);
     const spreadPercent = (ratio - 1) * 100;
 
-    // Check for pool errors (>10% loss indicates something wrong)
+    // ✅ ENHANCED VALIDATION: More detailed error detection
+    if (spreadPercent < -50) {
+      console.log(`   ⚠️ Extreme loss detected: ${spreadPercent.toFixed(2)}% - likely pool/price error`);
+      return {
+        hasSpread: false,
+        reason: 'POOL_ERROR',
+        spreadPercent
+      };
+    }
+
     if (spreadPercent < -10) {
       return {
         hasSpread: false,
@@ -2155,9 +2366,19 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
       };
     }
 
-    // Need at least 0.05% spread to potentially be profitable after fees & gas
-    // Lowered from 0.3% to catch more opportunities in competitive DeFi markets
-    const MIN_SPREAD_PERCENT = 0.05;
+    // ✅ DYNAMIC MINIMUM: Adjust based on DEX types and fees
+    // Calculate minimum spread needed to cover fees + gas
+    // Note: platformFee1/2 are already in decimal format (0.003 = 0.3%), not basis points
+    const buyFeePercent = platformFee1.mul(100).toNumber(); // Convert decimal to %
+    const sellFeePercent = platformFee2.mul(100).toNumber();
+    const totalFeePercent = buyFeePercent + sellFeePercent;
+    const gasOverheadPercent = 0.15; // ~0.15% gas overhead estimate
+
+    // Minimum spread = total fees + gas + 0.1% safety margin
+    const MIN_SPREAD_PERCENT = totalFeePercent + gasOverheadPercent + 0.1;
+
+    // Log the dynamic threshold for transparency
+    console.log(`   💰 Min profitable spread: ${MIN_SPREAD_PERCENT.toFixed(2)}% (fees: ${totalFeePercent.toFixed(2)}% + gas: ${gasOverheadPercent}% + margin: 0.1%)`);
     if (spreadPercent < MIN_SPREAD_PERCENT) {
       return {
         hasSpread: false,
@@ -2173,6 +2394,7 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
     };
 
   } catch (error) {
+    console.log(`   ❌ Quote error: ${error.message}`);
     return {
       hasSpread: false,
       reason: error.message || 'QUOTE_ERROR',
@@ -2937,192 +3159,192 @@ function calculateOptimalArbitrageAmount(buyPrice, sellPrice, buyLiquidity, sell
 
 //   return opportunities;
 // }
-async function crossArbitrageOptimized(allPrices) {
-  const timer = new PerformanceTimer();
-  logToMain('🔍 Starting optimized cross arbitrage analysis');
+// async function crossArbitrageOptimized(allPrices) {
+//   const timer = new PerformanceTimer();
+//   logToMain('🔍 Starting optimized cross arbitrage analysis');
 
-  const opportunities = [];
-  const pricesByPool = new Map();
+//   const opportunities = [];
+//   const pricesByPool = new Map();
 
-  // Group by pool and separate V2/V3
-  for (const price of allPrices) {
-    if (!pricesByPool.has(price.poolName)) {
-      pricesByPool.set(price.poolName, { v2: [], v3: [] });
-    }
+//   // Group by pool and separate V2/V3
+//   for (const price of allPrices) {
+//     if (!pricesByPool.has(price.poolName)) {
+//       pricesByPool.set(price.poolName, { v2: [], v3: [] });
+//     }
 
-    if (price.dex.includes('V3')) {
-      pricesByPool.get(price.poolName).v3.push(price);
-    } else {
-      pricesByPool.get(price.poolName).v2.push(price);
-    }
-  }
+//     if (price.dex.includes('V3')) {
+//       pricesByPool.get(price.poolName).v3.push(price);
+//     } else {
+//       pricesByPool.get(price.poolName).v2.push(price);
+//     }
+//   }
 
-  timer.checkpoint('Cross prices grouped');
+//   timer.checkpoint('Cross prices grouped');
 
-  // Process pools in parallel
-  const poolPromises = Array.from(pricesByPool.entries())
-    .filter(([_, poolData]) => poolData.v2.length > 0 && poolData.v3.length > 0)
-    .map(([poolName, poolData]) =>
-      processCrossArbitragePool(poolName, poolData)
-    );
+//   // Process pools in parallel
+//   const poolPromises = Array.from(pricesByPool.entries())
+//     .filter(([_, poolData]) => poolData.v2.length > 0 && poolData.v3.length > 0)
+//     .map(([poolName, poolData]) =>
+//       processCrossArbitragePool(poolName, poolData)
+//     );
 
-  const poolResults = await Promise.allSettled(poolPromises);
+//   const poolResults = await Promise.allSettled(poolPromises);
 
-  poolResults.forEach(result => {
-    if (result.status === 'fulfilled' && result.value) {
-      opportunities.push(...result.value);
-    }
-  });
+//   poolResults.forEach(result => {
+//     if (result.status === 'fulfilled' && result.value) {
+//       opportunities.push(...result.value);
+//     }
+//   });
 
-  timer.checkpoint('Cross arbitrage analysis completed');
-  logToMain(`✅ Found ${opportunities.length} cross arbitrage opportunities`);
+//   timer.checkpoint('Cross arbitrage analysis completed');
+//   logToMain(`✅ Found ${opportunities.length} cross arbitrage opportunities`);
 
-  // Log summary of all cross opportunities
-  if (opportunities.length > 0) {
-    logOpportunitySummary(opportunities);
-  }
+//   // Log summary of all cross opportunities
+//   if (opportunities.length > 0) {
+//     logOpportunitySummary(opportunities);
+//   }
 
-  return opportunities;
-}
+//   return opportunities;
+// }
 
-// Process individual pool for cross arbitrage
-async function processCrossArbitragePool(poolName, poolData) {
-  const { v2, v3 } = poolData;
-  const opportunities = [];
+// // Process individual pool for cross arbitrage
+// async function processCrossArbitragePool(poolName, poolData) {
+//   const { v2, v3 } = poolData;
+//   const opportunities = [];
 
-  const bestV2 = v2.reduce((best, current) =>
-    new Decimal(current.priceOfAinB).lt(best.priceOfAinB) ? current : best,
-    { priceOfAinB: new Decimal(Infinity) }
-  );
-  const bestV3 = v3.reduce((best, current) =>
-    new Decimal(current.priceOfAinB).lt(best.priceOfAinB) ? current : best,
-    { priceOfAinB: new Decimal(Infinity) }
-  );
+//   const bestV2 = v2.reduce((best, current) =>
+//     new Decimal(current.priceOfAinB).lt(best.priceOfAinB) ? current : best,
+//     { priceOfAinB: new Decimal(Infinity) }
+//   );
+//   const bestV3 = v3.reduce((best, current) =>
+//     new Decimal(current.priceOfAinB).lt(best.priceOfAinB) ? current : best,
+//     { priceOfAinB: new Decimal(Infinity) }
+//   );
 
-  const v2PriceAinB = new Decimal(bestV2.priceOfAinB);
-  const v3PriceAinB = new Decimal(bestV3.priceOfAinB);
+//   const v2PriceAinB = new Decimal(bestV2.priceOfAinB);
+//   const v3PriceAinB = new Decimal(bestV3.priceOfAinB);
 
-  if (!v2PriceAinB.isFinite() || !v3PriceAinB.isFinite() || v2PriceAinB.lte(0) || v3PriceAinB.lte(0)) {
-    logToMain(`Skipping cross arbitrage for ${poolName}: Invalid prices (V2: ${v2PriceAinB}, V3: ${v3PriceAinB})`, 'warn');
-    return opportunities;
-  }
+//   if (!v2PriceAinB.isFinite() || !v3PriceAinB.isFinite() || v2PriceAinB.lte(0) || v3PriceAinB.lte(0)) {
+//     logToMain(`Skipping cross arbitrage for ${poolName}: Invalid prices (V2: ${v2PriceAinB}, V3: ${v3PriceAinB})`, 'warn');
+//     return opportunities;
+//   }
 
-  const buyPriceObj = v2PriceAinB.lt(v3PriceAinB) ? bestV2 : bestV3;
-  const sellPriceObj = v2PriceAinB.lt(v3PriceAinB) ? bestV3 : bestV2;
-  const buyPriceAinB = v2PriceAinB.lt(v3PriceAinB) ? v2PriceAinB : v3PriceAinB;
-  const sellPriceAinB = v2PriceAinB.lt(v3PriceAinB) ? v3PriceAinB : v2PriceAinB;
+//   const buyPriceObj = v2PriceAinB.lt(v3PriceAinB) ? bestV2 : bestV3;
+//   const sellPriceObj = v2PriceAinB.lt(v3PriceAinB) ? bestV3 : bestV2;
+//   const buyPriceAinB = v2PriceAinB.lt(v3PriceAinB) ? v2PriceAinB : v3PriceAinB;
+//   const sellPriceAinB = v2PriceAinB.lt(v3PriceAinB) ? v3PriceAinB : v2PriceAinB;
 
-  const spread = sellPriceAinB.minus(buyPriceAinB).div(buyPriceAinB);
-  if (spread.lte(0.001)) {
-    logToMain(`Skipping cross arbitrage for ${poolName}: Spread too low (${spread}%)`, 'debug');
-    return opportunities;
-  }
+//   const spread = sellPriceAinB.minus(buyPriceAinB).div(buyPriceAinB);
+//   if (spread.lte(0.001)) {
+//     logToMain(`Skipping cross arbitrage for ${poolName}: Spread too low (${spread}%)`, 'debug');
+//     return opportunities;
+//   }
 
-  const tokenA = buyPriceObj.tokenA.symbol;
-  const tokenB = buyPriceObj.tokenB.symbol;
-  const tokenADecimals = getTokenDecimals(tokenA);
-  const tokenBDecimals = getTokenDecimals(tokenB);
+//   const tokenA = buyPriceObj.tokenA.symbol;
+//   const tokenB = buyPriceObj.tokenB.symbol;
+//   const tokenADecimals = getTokenDecimals(tokenA);
+//   const tokenBDecimals = getTokenDecimals(tokenB);
 
-  // Use ethers.parseUnits for input amount
-  const inputAmountHuman = '5'; // 5 tokens
-  const optimalInput = new Decimal(ethers.parseUnits(inputAmountHuman, tokenBDecimals).toString());
-  const platformFee1 = new Decimal(buyPriceObj.fee);
-  const platformFee2 = new Decimal(sellPriceObj.fee);
+//   // Use ethers.parseUnits for input amount
+//   const inputAmountHuman = '5'; // 5 tokens
+//   const optimalInput = new Decimal(ethers.parseUnits(inputAmountHuman, tokenBDecimals).toString());
+//   const platformFee1 = new Decimal(buyPriceObj.fee);
+//   const platformFee2 = new Decimal(sellPriceObj.fee);
 
-  // Step 1: Buy A with B
-  const amountA = optimalInput.mul(new Decimal(1).minus(platformFee1).minus(PRIORITY_FEE)).div(buyPriceAinB);
-  // Step 2: Sell A for B
-  const output = amountA.mul(new Decimal(1).minus(platformFee2).minus(PRIORITY_FEE)).mul(sellPriceAinB);
-  const gasCostETH = await calculateGasCost(wsProvider, 350000)
-  const gasCostWei = ethers.parseEther(gasCostETH.toString());
+//   // Step 1: Buy A with B
+//   const amountA = optimalInput.mul(new Decimal(1).minus(platformFee1).minus(PRIORITY_FEE)).div(buyPriceAinB);
+//   // Step 2: Sell A for B
+//   const output = amountA.mul(new Decimal(1).minus(platformFee2).minus(PRIORITY_FEE)).mul(sellPriceAinB);
+//   const gasCostETH = await calculateGasCost(wsProvider, 350000)
+//   const gasCostWei = ethers.parseEther(gasCostETH.toString());
 
-  // Convert gas cost to token decimals (assuming tokenB has different decimals than ETH)
-  // If tokenB is not ETH, you need to convert using ETH/tokenB price
-  let gasCost;
-  if (tokenB === 'ETH' || tokenB === 'WETH') {
-    // Direct conversion for ETH
-    gasCost = new Decimal(gasCostWei.toString());
-  } else {
-    // For other tokens, you need ETH price in tokenB terms
-    // This is a simplified approach - you might need actual price conversion
-    const ethPriceInTokenB = new Decimal('2600'); // ETH price in USD, adjust as needed
-    const tokenBPriceInUSD = new Decimal('1'); // Adjust based on actual tokenB price
-    const ethPriceInTokenB_ratio = ethPriceInTokenB.div(tokenBPriceInUSD);
+//   // Convert gas cost to token decimals (assuming tokenB has different decimals than ETH)
+//   // If tokenB is not ETH, you need to convert using ETH/tokenB price
+//   let gasCost;
+//   if (tokenB === 'ETH' || tokenB === 'WETH') {
+//     // Direct conversion for ETH
+//     gasCost = new Decimal(gasCostWei.toString());
+//   } else {
+//     // For other tokens, you need ETH price in tokenB terms
+//     // This is a simplified approach - you might need actual price conversion
+//     const ethPriceInTokenB = new Decimal('2600'); // ETH price in USD, adjust as needed
+//     const tokenBPriceInUSD = new Decimal('1'); // Adjust based on actual tokenB price
+//     const ethPriceInTokenB_ratio = ethPriceInTokenB.div(tokenBPriceInUSD);
 
-    gasCost = new Decimal(gasCostWei.toString()).mul(ethPriceInTokenB_ratio);
-  }
+//     gasCost = new Decimal(gasCostWei.toString()).mul(ethPriceInTokenB_ratio);
+//   }
 
-  const grossProfit = output.minus(optimalInput);
-  const netProfit = grossProfit.minus(gasCost);
+//   const grossProfit = output.minus(optimalInput);
+//   const netProfit = grossProfit.minus(gasCost);
 
-  // Format amounts for logging
-  const inputFormatted = ethers.formatUnits(optimalInput.toFixed(0), tokenBDecimals);
-  const amountAFormatted = ethers.formatUnits(amountA.toFixed(0), tokenADecimals);
-  const outputFormatted = ethers.formatUnits(output.toFixed(0), tokenBDecimals);
-  const grossProfitFormatted = ethers.formatUnits(grossProfit.toFixed(0), tokenBDecimals);
-  const gasCostFormatted = ethers.formatUnits(gasCost.toFixed(0), tokenBDecimals);
-  const netProfitFormatted = ethers.formatUnits(netProfit.toFixed(0), tokenBDecimals);
+//   // Format amounts for logging
+//   const inputFormatted = ethers.formatUnits(optimalInput.toFixed(0), tokenBDecimals);
+//   const amountAFormatted = ethers.formatUnits(amountA.toFixed(0), tokenADecimals);
+//   const outputFormatted = ethers.formatUnits(output.toFixed(0), tokenBDecimals);
+//   const grossProfitFormatted = ethers.formatUnits(grossProfit.toFixed(0), tokenBDecimals);
+//   const gasCostFormatted = ethers.formatUnits(gasCost.toFixed(0), tokenBDecimals);
+//   const netProfitFormatted = ethers.formatUnits(netProfit.toFixed(0), tokenBDecimals);
 
-  const opportunity = {
-    type: 'v3_cross',
-    poolName,
-    direction: `${tokenA}->${tokenB}->${tokenA}`,
-    buyDex: buyPriceObj.dex,
-    sellDex: sellPriceObj.dex,
-    buyPrice: buyPriceAinB,
-    sellPrice: sellPriceAinB,
-    pair: poolName,
-    amount_in: optimalInput.toString(),
-    amount_out: output.toFixed(0),
-    amountA: amountA.toFixed(0),
-    outputFormatted,
-    inputFormatted,
-    amountAFormatted,
-    gasEstimation: gasCost,
-    profit: netProfit,
-    grossProfit: grossProfit,
-    grossProfitFormatted,
-    isProfitable: netProfit.gt(0),
-    formatted: {
-      input: `${inputFormatted} ${tokenB}`,
-      buyToken: `${tokenA} on ${buyPriceObj.dex} at ${buyPriceAinB}`,
-      platformFee1: `${platformFee1.mul(100)}%`,
-      priorityFee: `${PRIORITY_FEE.mul(100)}%`,
-      outputAmount: `${amountAFormatted} ${tokenA}`,
-      sellToken: `${tokenA} on ${sellPriceObj.dex} at ${sellPriceAinB}`,
-      platformFee2: `${platformFee2.mul(100)}%`,
-      outputAmountBack: `${outputFormatted} ${tokenB}`,
-      grossProfit: `${grossProfitFormatted} ${tokenB}`,
-      gasCost: `${gasCostFormatted} ${tokenB}`,
-      netProfit: `${netProfitFormatted} ${tokenB}`,
-    }
-  };
+//   const opportunity = {
+//     type: 'v3_cross',
+//     poolName,
+//     direction: `${tokenA}->${tokenB}->${tokenA}`,
+//     buyDex: buyPriceObj.dex,
+//     sellDex: sellPriceObj.dex,
+//     buyPrice: buyPriceAinB,
+//     sellPrice: sellPriceAinB,
+//     pair: poolName,
+//     amount_in: optimalInput.toString(),
+//     amount_out: output.toFixed(0),
+//     amountA: amountA.toFixed(0),
+//     outputFormatted,
+//     inputFormatted,
+//     amountAFormatted,
+//     gasEstimation: gasCost,
+//     profit: netProfit,
+//     grossProfit: grossProfit,
+//     grossProfitFormatted,
+//     isProfitable: netProfit.gt(0),
+//     formatted: {
+//       input: `${inputFormatted} ${tokenB}`,
+//       buyToken: `${tokenA} on ${buyPriceObj.dex} at ${buyPriceAinB}`,
+//       platformFee1: `${platformFee1.mul(100)}%`,
+//       priorityFee: `${PRIORITY_FEE.mul(100)}%`,
+//       outputAmount: `${amountAFormatted} ${tokenA}`,
+//       sellToken: `${tokenA} on ${sellPriceObj.dex} at ${sellPriceAinB}`,
+//       platformFee2: `${platformFee2.mul(100)}%`,
+//       outputAmountBack: `${outputFormatted} ${tokenB}`,
+//       grossProfit: `${grossProfitFormatted} ${tokenB}`,
+//       gasCost: `${gasCostFormatted} ${tokenB}`,
+//       netProfit: `${netProfitFormatted} ${tokenB}`,
+//     }
+//   };
 
-  // Log all opportunities, profitable or not
-  console.log(
-    `\n🔄 Cross Arbitrage Opportunity`,
-    `\n  Pair: ${tokenA}/${tokenB}`,
-    `\n  Start: ${inputFormatted} ${tokenB} (${optimalInput} wei)`,
-    `\n  Step 1: Buy ${tokenA} on ${buyPriceObj.dex} at ${buyPriceAinB} ${tokenB}/${tokenA}`,
-    `\n    Platform Fee: ${platformFee1.mul(100)}% | Priority Fee: ${PRIORITY_FEE.mul(100)}%`,
-    `\n    Output: ${amountAFormatted} ${tokenA}`,
-    `\n  Step 2: Sell ${tokenA} on ${sellPriceObj.dex} at ${sellPriceAinB} ${tokenB}/${tokenA}`,
-    `\n    Platform Fee: ${platformFee2.mul(100)}% | Priority Fee: ${PRIORITY_FEE.mul(100)}%`,
-    `\n    Output: ${outputFormatted} ${tokenB}`,
-    `\n  Gross Profit: ${grossProfitFormatted} ${tokenB}`,
-    `\n  Gas Cost: ${gasCostFormatted} ${tokenB}`,
-    `\n  Net Profit: ${netProfitFormatted} ${tokenB}`,
-    `\n  Profitable: ${netProfit.gt(0) ? '✅ YES' : '❌ NO'}`
-  );
+//   // Log all opportunities, profitable or not
+//   console.log(
+//     `\n🔄 Cross Arbitrage Opportunity`,
+//     `\n  Pair: ${tokenA}/${tokenB}`,
+//     `\n  Start: ${inputFormatted} ${tokenB} (${optimalInput} wei)`,
+//     `\n  Step 1: Buy ${tokenA} on ${buyPriceObj.dex} at ${buyPriceAinB} ${tokenB}/${tokenA}`,
+//     `\n    Platform Fee: ${platformFee1.mul(100)}% | Priority Fee: ${PRIORITY_FEE.mul(100)}%`,
+//     `\n    Output: ${amountAFormatted} ${tokenA}`,
+//     `\n  Step 2: Sell ${tokenA} on ${sellPriceObj.dex} at ${sellPriceAinB} ${tokenB}/${tokenA}`,
+//     `\n    Platform Fee: ${platformFee2.mul(100)}% | Priority Fee: ${PRIORITY_FEE.mul(100)}%`,
+//     `\n    Output: ${outputFormatted} ${tokenB}`,
+//     `\n  Gross Profit: ${grossProfitFormatted} ${tokenB}`,
+//     `\n  Gas Cost: ${gasCostFormatted} ${tokenB}`,
+//     `\n  Net Profit: ${netProfitFormatted} ${tokenB}`,
+//     `\n  Profitable: ${netProfit.gt(0) ? '✅ YES' : '❌ NO'}`
+//   );
 
-  // logCrossArbitrageOpportunity(opportunity);
+//   // logCrossArbitrageOpportunity(opportunity);
 
-  const dbId = await storeOpportunityInDB(opportunity);
-  opportunity.dbId = dbId;
-  opportunities.push(opportunity);
+//   const dbId = await storeOpportunityInDB(opportunity);
+//   opportunity.dbId = dbId;
+//   opportunities.push(opportunity);
 
-  return opportunities;
-}
+//   return opportunities;
+// }
 // OPTIMIZED TRIANGULAR ARBITRAGE - Using efficient graph algorithms
 async function triangularArbitrageOptimized(allPrices) {
   const timer = new PerformanceTimer();

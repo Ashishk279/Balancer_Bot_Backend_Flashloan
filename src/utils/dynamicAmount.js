@@ -212,6 +212,17 @@ export function calculateSafeTradeAmount(buyPoolData, sellPoolData) {
   const buyPoolLiquidity = new Decimal(buyPoolData.liquidityInTokenB || '0');
   const sellPoolLiquidity = new Decimal(sellPoolData.liquidityInTokenB || '0');
 
+  // ✅ VALIDATION: Detect suspiciously low liquidity (< 0.01) - likely a calculation error
+  if (sellPoolLiquidity.lt(new Decimal('0.01')) && sellPoolLiquidity.gt(0)) {
+    console.log(`   ⚠️ Sell pool liquidity suspiciously low: ${sellPoolLiquidity.toFixed(10)} ${tokenB} - likely calculation error`);
+    return null;
+  }
+
+  if (buyPoolLiquidity.lt(new Decimal('0.01')) && buyPoolLiquidity.gt(0)) {
+    console.log(`   ⚠️ Buy pool liquidity suspiciously low: ${buyPoolLiquidity.toFixed(10)} ${tokenB} - likely calculation error`);
+    return null;
+  }
+
   console.log(`   📊 Buy Pool Liquidity: ${buyPoolLiquidity.toFixed(4)} ${tokenB}`);
   console.log(`   📊 Sell Pool Liquidity: ${sellPoolLiquidity.toFixed(4)} ${tokenB}`);
 

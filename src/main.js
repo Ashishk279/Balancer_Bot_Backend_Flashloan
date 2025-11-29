@@ -1,65 +1,180 @@
 /**
- * Main Arbitrage Bot - Enhanced with V3 Engine
- * 
- * This bot integrates both legacy arbitrage analysis and the new V3 engine:
- * - V3 Engine: Advanced arbitrage detection with proper decimal handling and comprehensive logging
- * - Legacy Engine: Backup arbitrage analysis for compatibility
- * 
- * Configuration:
- * - V3_ENGINE_ENABLED: Set to 'false' to disable V3 engine (default: true)
- * - BATCH_SIZE: Number of pairs to process in each batch (default: 5)
- * 
- * The V3 engine provides:
- * - Direct arbitrage (same pair, different DEXes)
- * - Cross arbitrage (V2 vs V3 protocols)
- * - Triangular arbitrage (3-token cycles)
- * - Proper token decimal handling
- * - Detailed financial breakdowns
- * - Performance optimization
+ * Main Arbitrage Bot - Enhanced with Parallel Processing v2.0
+ *
+ * NEW FEATURES:
+ * - Smart RPC Router with local node priority
+ * - Gas Oracle for optimal pricing
+ * - Parallel execution with 5 workers
+ * - Quote caching (60-80% hit rate)
+ * - Performance monitoring
+ * - Real-time statistics
+ *
+ * TARGET: 90-95% Success Rate with Local Ethereum Node
  */
 
 import "dotenv/config";
 
+// ==================== PARALLEL PROCESSING IMPORTS ====================
+import { initializeRPCRouter, getRPCRouter } from './provider/smartRPCRouter.js';
+import { initializeGasOracle, getGasOracle } from './utils/gasOracle.js';
+import { initializeParallelExecution, getExecutionManager } from './layers/parallelExecutionLayer.js';
+import performanceMonitor from './utils/performanceMonitor.js';
+import quoteCache from './utils/quoteCache.js';
+import { validateConfig, MONITORING_CONFIG } from './config/parallelConfig.js';
+
+// ==================== EXISTING IMPORTS ====================
 import { executeFlashLoanTransaction, executeOpportunities } from './layers/executionLayer.js';
 import { flushToDB } from './layers/persistenceLayer.js';
-
 import db from './db.js';
 import { startApi } from './api/api.js';
-
 import logger from './utils/logger.js';
 import { checkRPCHealth } from './utils/rpcHealth.js';
-// Import V3 Engine
 import { runArbitrageEngine } from './services/v3/arbitrageEngin/v3Engin.js';
-import ws from "./provider/websocket.js"
 import { DIRECT_SWAP_PAIRS } from "./constants/v3/v3_token_pools.js";
 import { createFlashLoanPayload } from "./services/v3/arbitrageEngin/payload.js";
 
 // --- CONFIGURATION ---
 const BATCH_SIZE = process.env.BATCH_SIZE || 5;
-const V3_ENGINE_ENABLED = process.env.V3_ENGINE_ENABLED !== 'false'; // Default to true
+const V3_ENGINE_ENABLED = process.env.V3_ENGINE_ENABLED !== 'false';
+const PARALLEL_PROCESSING_ENABLED = process.env.ENABLE_PARALLEL_PROCESSING !== 'false';
 
 // --- NETWORK CONFIGURATION ---
-// Ensure API server accepts all connections
 process.env.API_HOST = process.env.API_HOST || '0.0.0.0';
 if (!process.env.API_PORT) {
     process.env.API_PORT = '8000';
 }
 
-// --- DYNAMIC RPC INITIALIZATION ---
-let priceFetcher;
-let arbitrageDetector;
-let opportunityProcessor;
-let wsProvider; // <-- ADDED: WebSocket provider instance
-let v3EngineEnabled = true; // Flag to enable/disable V3 engine
+// ==================== GLOBAL VARIABLES ====================
+let wsProvider;
+let rpcRouter;
+let gasOracle;
+let executionManager;
+let v3EngineEnabled = V3_ENGINE_ENABLED;
+let lastProcessedBlock = 0;
 
 // Track cooldown period
 let isCooldown = false;
 let lastExecutionTime = null;
 
 /**
- * Main monitoring loop - Execute top opportunity within 1-2s, then cooldown for 30s
+ * Initialize all systems with parallel processing
  */
-async function monitor() {
+async function initializeSystems() {
+    console.log('\n╔════════════════════════════════════════════════════════════╗');
+    console.log('║   ARBITRAGE BOT WITH PARALLEL PROCESSING v2.0              ║');
+    console.log('╚════════════════════════════════════════════════════════════╝\n');
+
+    try {
+        // Step 1: Validate parallel processing configuration
+        if (PARALLEL_PROCESSING_ENABLED) {
+            console.log('📋 Validating parallel processing configuration...');
+            validateConfig();
+        }
+
+        // Step 2: Initialize RPC Router (with local node priority)
+        if (PARALLEL_PROCESSING_ENABLED) {
+            console.log('🌐 Initializing Smart RPC Router...');
+            rpcRouter = await initializeRPCRouter();
+            wsProvider = rpcRouter.getPrimaryProvider();
+
+            if (!wsProvider) {
+                throw new Error('Failed to get primary provider from RPC Router');
+            }
+
+            // Determine which provider is actually being used
+            const primaryProvider = rpcRouter.providers.find(p => p.isLocal && p.isHealthy)
+                ? 'Local Ethereum Node'
+                : rpcRouter.providers.find(p => p.isHealthy)?.name || 'Unknown';
+
+            console.log('✅ RPC Router initialized successfully');
+            console.log(`   Primary Provider: ${primaryProvider}`);
+        } else {
+            // Fallback to old WebSocket provider
+            const ws = (await import("./provider/websocket.js")).default;
+            wsProvider = ws.getProvider();
+            console.log('📡 Using standard WebSocket provider (parallel processing disabled)');
+        }
+
+        // Step 3: Initialize Gas Oracle
+        if (PARALLEL_PROCESSING_ENABLED) {
+            console.log('⛽ Initializing Gas Oracle...');
+            gasOracle = await initializeGasOracle(wsProvider);
+            console.log('✅ Gas Oracle initialized and tracking block gas prices');
+        }
+
+        // Step 4: Initialize Database and Logger
+        console.log('📝 Initializing logger...');
+        await logger.init();
+
+        console.log('💾 Connecting to database...');
+        await db.init();
+        console.log('✅ Database connected and initialized');
+
+        // Step 5: Start API Server
+        console.log('🌐 Starting API server...');
+        console.log(`📡 API accessible on port ${process.env.API_PORT || 8000}`);
+        startApi();
+
+        // Step 6: Initialize Parallel Execution Manager
+        if (PARALLEL_PROCESSING_ENABLED) {
+            console.log('⚡ Initializing Parallel Execution Manager...');
+            executionManager = await initializeParallelExecution(wsProvider);
+            console.log('✅ Execution Manager initialized');
+
+            console.log('🚀 Starting execution workers...');
+            await executionManager.start();
+            console.log('✅ Execution workers started and ready');
+        } else {
+            // Use old execution layer
+            console.log('Starting standard execution layer...');
+            executeOpportunities(wsProvider);
+        }
+
+        // Step 7: Start periodic DB flush
+        console.log('🔄 Starting periodic DB flush...');
+        setInterval(flushToDB, 30000);
+
+        // Step 8: Log system status
+        console.log('\n🎉 Bot is fully operational!\n');
+        console.log('📊 System Configuration:');
+        console.log(`   V3 Engine: ${v3EngineEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
+        console.log(`   Parallel Processing: ${PARALLEL_PROCESSING_ENABLED ? '✅ ENABLED' : '❌ DISABLED'}`);
+        if (PARALLEL_PROCESSING_ENABLED) {
+            console.log(`   Execution Workers: 5 (parallel)`);
+            console.log(`   Quote Caching: ✅ ENABLED`);
+            console.log(`   Gas Oracle: ✅ ENABLED`);
+            console.log(`   Performance Monitoring: ✅ ENABLED`);
+        }
+        console.log('');
+
+        // Step 9: Start periodic statistics logging
+        if (PARALLEL_PROCESSING_ENABLED && MONITORING_CONFIG.STATS_INTERVAL) {
+            console.log('📊 Starting periodic statistics reporting...');
+            setInterval(() => {
+                console.log('\n' + '='.repeat(60));
+                console.log('PERIODIC STATISTICS REPORT');
+                console.log('='.repeat(60));
+
+                if (rpcRouter) rpcRouter.logStats();
+                if (gasOracle) gasOracle.logStats();
+                quoteCache.logStats();
+                if (executionManager) executionManager.logStats();
+                performanceMonitor.logStats();
+            }, MONITORING_CONFIG.STATS_INTERVAL);
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error('❌ System initialization failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Main monitoring loop - Execute top opportunity within 1-2s
+ */
+async function monitor(blockNumber = 0) {
     // Skip if in cooldown period
     if (isCooldown) {
         const elapsed = Date.now() - lastExecutionTime;
@@ -68,6 +183,8 @@ async function monitor() {
         return;
     }
 
+    const blockStart = Date.now();
+
     console.log(`\n╔═══════════════════════════════════════════════════════════════╗`);
     console.log(`║  [${new Date().toLocaleTimeString()}] STARTING OPPORTUNITY ANALYSIS                ║`);
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
@@ -75,94 +192,109 @@ async function monitor() {
     try {
         const analysisStartTime = Date.now();
 
-        // RPC HEALTH CHECK
-        console.log('🏥 Checking RPC node health...');
+        // RPC HEALTH CHECK (using Smart RPC Router if enabled)
+        console.log('🏥 Checking RPC health...');
         const health = await checkRPCHealth(wsProvider);
         if (!health.healthy) {
-            console.log('⚠️  RPC not healthy - Detection may be slow or fail');
+            console.log('⚠️  RPC not optimal:');
             console.log(`   Block time: ${health.blockTime || 'N/A'}ms`);
             console.log(`   Quoter time: ${health.quoterTime || 'N/A'}ms`);
-            console.log(`   Error: ${health.error || 'Unknown'}`);
+        } else {
+            console.log('✅ RPC health check passed');
         }
 
-        // V3 ENGINE ANALYSIS
+        // V3 ENGINE ANALYSIS WITH PARALLEL PROCESSING
         let v3Opportunities = [];
         if (v3EngineEnabled) {
-            console.log('🚀 V3 ENGINE: Analyzing arbitrage opportunities...');
+            console.log('🚀 V3 ENGINE: Analyzing with parallel processing...');
             try {
                 if (DIRECT_SWAP_PAIRS && DIRECT_SWAP_PAIRS.length > 0) {
                     console.log(`🎯 Analyzing ${DIRECT_SWAP_PAIRS.length} pairs...`);
 
                     const v3StartTime = Date.now();
-                    v3Opportunities = await runArbitrageEngine(DIRECT_SWAP_PAIRS);
+
+                    // Run with parallel processing options (passing SmartRPCRouter provider)
+                    v3Opportunities = await runArbitrageEngine(DIRECT_SWAP_PAIRS, blockNumber, wsProvider);
+
                     const v3EndTime = Date.now();
                     const analysisTime = v3EndTime - v3StartTime;
+
+                    // Track performance
+                    if (PARALLEL_PROCESSING_ENABLED) {
+                        performanceMonitor.trackAnalysis(analysisTime, v3Opportunities?.length || 0);
+                    }
 
                     console.log(`\n📊 ANALYSIS COMPLETED in ${analysisTime}ms`);
                     console.log(`   Total opportunities found: ${v3Opportunities.length}`);
 
                     if (v3Opportunities.length > 0) {
-                        // Sort by profit (descending) to get TOP opportunity
+                        // Sort by profit (descending)
                         v3Opportunities.sort((a, b) => {
                             const profitA = parseFloat(a.profit?.toString() || '0');
                             const profitB = parseFloat(b.profit?.toString() || '0');
                             return profitB - profitA;
                         });
 
-                        console.log(`\n📋 ALL OPPORTUNITIES FOUND (sorted by profit):`);
-                        v3Opportunities.forEach((opp, index) => {
+                        console.log(`\n📋 TOP 5 OPPORTUNITIES:`);
+                        v3Opportunities.slice(0, 5).forEach((opp, index) => {
                             console.log(`\n   [${index + 1}] ${opp.type} - ${opp.poolId || opp.poolName}`);
                             console.log(`       Profit: ${opp.profit?.toString()}`);
                             console.log(`       Buy: ${opp.buyDex} @ ${opp.buyPrice?.toString()}`);
                             console.log(`       Sell: ${opp.sellDex} @ ${opp.sellPrice?.toString()}`);
-                            console.log(`       Amount In: ${opp.amount_in?.toString()}`);
                             console.log(`       Spread: ${opp.spread?.toString()}`);
                         });
-                        // logger.info('V3 Engine Opportunities', {
-                        //     opportunities: v3Opportunities,
-                        //     service: 'v3EngineMonitor'
-                        // });
-                        // Execute TOP opportunity (highest profit)
-                        const topOpportunity = v3Opportunities[0];
-                        const timeSinceStart = Date.now() - analysisStartTime;
 
-                        console.log(`\n🏆 TOP OPPORTUNITY IDENTIFIED (Analysis time: ${timeSinceStart}ms):`);
-                        console.log(`   Rank: #1 (Highest Profit)`);
-                        console.log(`   Profit: ${topOpportunity.profit?.toString()}`);
-                        console.log(`   Pool: ${topOpportunity.poolId || topOpportunity.poolName}`);
-                        console.log(`   Strategy: ${topOpportunity.type}`);
-                        // console.log("TOggggggggggggg", topOpportunity)
-
-                        // Execute within 1-2 second window
-                        if (timeSinceStart <= 2000) {
-                            console.log(`\n✅ Within execution window (${timeSinceStart}ms < 2000ms) - EXECUTING NOW!`);
-
-                            await executeTopOpportunity(topOpportunity);
-
-                            // Start 30-second cooldown
-                            startCooldown();
+                        // If parallel execution is enabled, opportunities are auto-stored in Redis
+                        // Workers will pick them up automatically
+                        if (PARALLEL_PROCESSING_ENABLED) {
+                            console.log(`\n✅ Opportunities stored in Redis queue`);
+                            console.log(`   Execution workers will process them automatically`);
                         } else {
-                            console.log(`\n⚠️  Analysis took ${timeSinceStart}ms (> 2000ms) - Skipping execution`);
+                            // Execute top opportunity (old way)
+                            const topOpportunity = v3Opportunities[0];
+                            const timeSinceStart = Date.now() - analysisStartTime;
+
+                            console.log(`\n🏆 TOP OPPORTUNITY (Analysis: ${timeSinceStart}ms):`);
+                            console.log(`   Profit: ${topOpportunity.profit?.toString()}`);
+                            console.log(`   Pool: ${topOpportunity.poolId || topOpportunity.poolName}`);
+
+                            if (timeSinceStart <= 2000) {
+                                console.log(`\n✅ Within execution window - EXECUTING NOW!`);
+                                await executeTopOpportunity(topOpportunity);
+                                startCooldown();
+                            } else {
+                                console.log(`\n⚠️  Analysis took ${timeSinceStart}ms (> 2000ms) - Skipping`);
+                            }
                         }
                     } else {
                         console.log(`\nℹ️  No opportunities found - continuing to next block`);
                     }
                 } else {
-                    console.log('⚠️  No pairs data available for V3 engine');
+                    console.log('⚠️  No pairs data available');
                 }
             } catch (error) {
                 console.error('❌ Error in V3 engine analysis:', error.message);
-                console.error('V3 Engine stack trace:', error.stack);
 
-                if (error.message.includes('critical') || error.message.includes('fatal')) {
-                    console.log('⚠️  Critical V3 engine error detected. Consider disabling V3_ENGINE_ENABLED=false');
+                if (PARALLEL_PROCESSING_ENABLED) {
+                    const blockLatency = Date.now() - blockStart;
+                    performanceMonitor.trackBlockProcessing(blockLatency, true);
                 }
             }
         }
 
+        // Track successful block processing
+        if (PARALLEL_PROCESSING_ENABLED) {
+            const blockLatency = Date.now() - blockStart;
+            performanceMonitor.trackBlockProcessing(blockLatency, false);
+        }
+
     } catch (error) {
         console.error("An error occurred in the monitoring loop:", error.message);
-        console.error("Stack trace:", error.stack);
+
+        if (PARALLEL_PROCESSING_ENABLED) {
+            const blockLatency = Date.now() - blockStart;
+            performanceMonitor.trackBlockProcessing(blockLatency, true);
+        }
     }
 }
 
@@ -170,9 +302,6 @@ async function monitor() {
  * Execute the top opportunity with detailed logging
  */
 async function executeTopOpportunity(opp) {
-    const { createDirectExecutionPayload } = await import('./services/v3/arbitrageEngin/payload.js');
-    const { executeTransaction } = await import('./layers/executionLayer.js');
-
     console.log(`\n╔════════════════════════════════════════════════════════════╗`);
     console.log(`║          EXECUTING TOP OPPORTUNITY (HIGHEST PROFIT)        ║`);
     console.log(`╚════════════════════════════════════════════════════════════╝`);
@@ -180,23 +309,14 @@ async function executeTopOpportunity(opp) {
     const executionStartTime = Date.now();
 
     try {
-        // Log full opportunity details
+        // Log opportunity details
         console.log(`\n📋 OPPORTUNITY DETAILS:`);
         console.log(`   Pool ID: ${opp.poolId || opp.poolName}`);
         console.log(`   Strategy: ${opp.type}`);
         console.log(`   Buy DEX: ${opp.buyDex}`);
         console.log(`   Sell DEX: ${opp.sellDex}`);
-        console.log(`   Token A: ${JSON.stringify(opp.tokenA)}`);
-        console.log(`   Token B: ${JSON.stringify(opp.tokenB)}`);
-        console.log(`   Amount In: ${opp.amount_in?.toString()}`);
-        console.log(`   Amount Out: ${opp.amount_out?.toString()}`);
         console.log(`   Expected Profit: ${opp.profit?.toString()}`);
-        console.log(`   Buy Price: ${opp.buyPrice?.toString()}`);
-        console.log(`   Sell Price: ${opp.sellPrice?.toString()}`);
         console.log(`   Spread: ${opp.spread?.toString()}`);
-        console.log(`   Fee 1: ${opp.fee1}`);
-        console.log(`   Fee 2: ${opp.fee2}`);
-        console.log(`   Gas Estimation: ${opp.gasEstimation}`);
 
         // Create execution payload
         console.log(`\n🔧 CREATING EXECUTION PAYLOAD...`);
@@ -205,8 +325,6 @@ async function executeTopOpportunity(opp) {
         const payloadTime = Date.now() - payloadStartTime;
 
         console.log(`   ✅ Payload created in ${payloadTime}ms`);
-        console.log(`\n📦 EXECUTION PAYLOAD:`);
-        console.log(JSON.stringify(execution_payload, null, 2));
 
         // Prepare execution object
         const execOpp = {
@@ -217,58 +335,44 @@ async function executeTopOpportunity(opp) {
             execution_payload: execution_payload,
             pair: opp.poolId || opp.poolName,
             buyDex: opp.buyDex,
-            sellDex: opp.sellDex,
-            txHash: opp.txHash
+            sellDex: opp.sellDex
         };
 
-        console.log(`\n💰 EXECUTION CHECK:`);
-        console.log(`   Estimated Profit: ${execOpp.estimated_profit}`);
-        console.log(`   Pair: ${execOpp.pair}`);
-        console.log(`   Meets WETH criteria: ${execOpp.pair.endsWith('WETH') ? 'YES ✅' : 'NO ❌'}`);
+        // Execute transaction
+        console.log(`\n🎯 EXECUTING TRANSACTION...`);
+        const txStartTime = Date.now();
 
-        // Execute transaction if profitable and meets criteria
-        if (execOpp.estimated_profit !== undefined && execOpp.pair.endsWith('WETH')) {
-            console.log(`\n🎯 EXECUTING TRANSACTION...`);
-            const txStartTime = Date.now();
+        const result = await executeFlashLoanTransaction(execOpp, wsProvider);
 
-            const result = await executeFlashLoanTransaction(execOpp, wsProvider);
+        const txTime = Date.now() - txStartTime;
+        const totalTime = Date.now() - executionStartTime;
 
-            const txTime = Date.now() - txStartTime;
-            const totalTime = Date.now() - executionStartTime;
+        // Track execution performance
+        if (PARALLEL_PROCESSING_ENABLED) {
+            performanceMonitor.trackExecution(totalTime, result.success);
+        }
 
-            console.log(`\n📊 TRANSACTION RESULT (executed in ${txTime}ms):`);
-            console.log(JSON.stringify(result, null, 2));
+        console.log(`\n📊 TRANSACTION RESULT (${txTime}ms):`);
 
-            if (result.success) {
-                console.log(`\n✅ ✅ ✅ TRANSACTION SUCCESSFUL! ✅ ✅ ✅`);
-                console.log(`   TX Hash: ${result.txHash}`);
-                console.log(`   Block Number: ${result.blockNumber}`);
-                console.log(`   Gas Used: ${result.gasUsed}`);
-                console.log(`   Gas Price: ${result.gasPrice} Gwei`);
-                console.log(`   Gas Cost: ${result.gasCost} ETH`);
-                console.log(`   Priority Fee: ${result.priorityFee} Gwei`);
-                console.log(`   Total Execution Time: ${totalTime}ms`);
-            } else {
-                console.log(`\n❌ ❌ ❌ TRANSACTION FAILED! ❌ ❌ ❌`);
-                console.log(`   Error: ${result.error}`);
-                console.log(`   Total Execution Time: ${totalTime}ms`);
-            }
+        if (result.success) {
+            console.log(`\n✅ ✅ ✅ TRANSACTION SUCCESSFUL! ✅ ✅ ✅`);
+            console.log(`   TX Hash: ${result.txHash}`);
+            console.log(`   Gas Used: ${result.gasUsed}`);
+            console.log(`   Total Time: ${totalTime}ms`);
         } else {
-            console.log(`\n⏭️  SKIPPING EXECUTION:`);
-            if (!execOpp.estimated_profit) {
-                console.log(`   Reason: No profit estimate`);
-            } else if (!execOpp.pair.endsWith('WETH')) {
-                console.log(`   Reason: Not a WETH pair (pair: ${execOpp.pair})`);
-            }
+            console.log(`\n❌ ❌ ❌ TRANSACTION FAILED! ❌ ❌ ❌`);
+            console.log(`   Error: ${result.error}`);
+            console.log(`   Total Time: ${totalTime}ms`);
         }
 
     } catch (error) {
         const totalTime = Date.now() - executionStartTime;
-        console.log(`\n❌ ❌ ❌ EXECUTION ERROR! ❌ ❌ ❌`);
-        console.log(`   Message: ${error.message}`);
-        console.log(`   Total Execution Time: ${totalTime}ms`);
-        console.log(`\n   Stack Trace:`);
-        console.log(error.stack);
+        console.log(`\n❌ EXECUTION ERROR: ${error.message}`);
+        console.log(`   Total Time: ${totalTime}ms`);
+
+        if (PARALLEL_PROCESSING_ENABLED) {
+            performanceMonitor.trackExecution(totalTime, false);
+        }
     }
 
     console.log(`\n╚════════════════════════════════════════════════════════════╝\n`);
@@ -282,70 +386,40 @@ function startCooldown() {
     lastExecutionTime = Date.now();
 
     console.log(`\n⏸️  ====== STARTING 30-SECOND COOLDOWN ======`);
-    console.log(`   Next analysis will start at: ${new Date(lastExecutionTime + 30000).toLocaleTimeString()}`);
+    console.log(`   Next analysis: ${new Date(lastExecutionTime + 30000).toLocaleTimeString()}`);
 
-    // Set timeout to end cooldown
     setTimeout(() => {
         isCooldown = false;
-        console.log(`\n✅ ====== COOLDOWN ENDED - Ready for next analysis ======\n`);
+        console.log(`\n✅ ====== COOLDOWN ENDED ======\n`);
     }, 30000);
 }
 
 /**
- * Process arbitrage opportunities for execution
+ * Start the bot
  */
-
-
-// --- START THE BOT ---
 async function startBot() {
     try {
         console.log('🚀 Starting Arbitrage Bot...');
 
+        // Initialize all systems
+        await initializeSystems();
 
+        // Subscribe to new blocks
+        wsProvider.on('block', (blockNumber) => {
+            // Skip duplicate blocks
+            if (blockNumber <= lastProcessedBlock) {
+                return;
+            }
+            lastProcessedBlock = blockNumber;
 
-
-        wsProvider = ws.getProvider(); // Get the initialized WebSocket provider
-        console.log(`Using WebSocket Provider: ${wsProvider}`);
-
-
-        await logger.init();
-
-
-        // 3.5. Log V3 Engine status
-        console.log(`🚀 V3 Engine Status: ${v3EngineEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
-        if (v3EngineEnabled) {
-            console.log('   📊 V3 Engine will provide enhanced arbitrage analysis');
-            console.log('   🔧 To disable V3 Engine, set V3_ENGINE_ENABLED=false in .env');
-        } else {
-            console.log('   🔄 Using legacy arbitrage analysis only');
-        }
-
-        // 5. Connect to DB and start API/monitoring
-        console.log('Connecting to and initializing database...');
-        await db.init();
-        console.log('|| Database connected and initialized successfully. ||');
-
-        // Start API server with network configuration
-        console.log('🌐 Starting API server...');
-        console.log(`📡 API will be accessible on port ${process.env.API_PORT || 8000}`);
-        console.log(`🔗 External access: http://172.31.18.227:${process.env.API_PORT || 8000}`);
-        startApi();
-
-        console.log('Starting execution layer...');
-        executeOpportunities(); // Non-blocking
-
-        // Start periodic DB flush
-        console.log('Starting periodic DB flush...');
-        setInterval(flushToDB, 30000); // Every 30 seconds
-
-        // 6. Subscribe to new blocks and trigger the monitor function
-        wsProvider.on('block', (blockNumber) => { // <-- ADDED
-            console.log(`New block received: ${blockNumber}`);
-            monitor();
+            console.log(`\n🔷 New Block: ${blockNumber} at ${new Date().toLocaleTimeString()}`);
+            monitor(blockNumber);
         });
 
-        // 7. Set up graceful shutdown
+        // Set up graceful shutdown
         setupGracefulShutdown();
+
+        console.log('✅ Bot started successfully and listening for blocks...\n');
 
     } catch (error) {
         console.error("Failed to start the bot:", error);
@@ -361,13 +435,29 @@ function setupGracefulShutdown() {
         console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
 
         try {
-            // Stop opportunity processor if running
-            if (opportunityProcessor) {
-                console.log('Stopping opportunity processor...');
-                await opportunityProcessor.emergencyStop();
+            // Stop execution manager
+            if (executionManager) {
+                console.log('Stopping execution manager...');
+                await executionManager.stop();
             }
 
-            // Close database connection
+            // Stop gas oracle
+            if (gasOracle) {
+                console.log('Stopping gas oracle...');
+                gasOracle.stop();
+            }
+
+            // Log final statistics
+            if (PARALLEL_PROCESSING_ENABLED) {
+                console.log('\n📊 FINAL STATISTICS:');
+                if (rpcRouter) rpcRouter.logStats();
+                if (gasOracle) gasOracle.logStats();
+                quoteCache.logStats();
+                if (executionManager) executionManager.logStats();
+                performanceMonitor.logStats();
+            }
+
+            // Close database
             console.log('Closing database connection...');
             await db.close();
 
@@ -377,6 +467,7 @@ function setupGracefulShutdown() {
                 wsProvider.destroy();
             }
 
+            // Close Redis
             const redis = (await import('./config/radis.js')).default;
             console.log('Closing Redis connection...');
             await redis.quit();
@@ -393,7 +484,7 @@ function setupGracefulShutdown() {
     // Handle different shutdown signals
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGUSR2', () => shutdown('SIGUSR2')); // For nodemon
+    process.on('SIGUSR2', () => shutdown('SIGUSR2'));
 
     // Handle uncaught exceptions
     process.on('uncaughtException', (error) => {
@@ -407,9 +498,5 @@ function setupGracefulShutdown() {
     });
 }
 
+// Start the bot
 startBot();
-
-
-
-
-

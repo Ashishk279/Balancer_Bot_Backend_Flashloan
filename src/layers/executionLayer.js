@@ -1,7 +1,6 @@
 import { consumeTopOpportunity, completeOpportunity, appendOpportunityToArrayFile } from '../services/opportunity.js';
 import FlashbotExecutor from "../services/v3/arbitrageEngin/flashbotExecuter.js";
 import { ethers } from 'ethers';
-import ws from '../provider/websocket.js';
 import logger from '../utils/logger.js';
 import { createDirectExecutionPayload, createFlashLoanPayload, getMinAmountOutWithSlippage } from '../services/v3/arbitrageEngin/payload.js';
 import Decimal from 'decimal.js';
@@ -10,9 +9,13 @@ import redis from '../config/radis.js';
 import { createDirectExecutionPayloadWithSDK } from '../services/v3/arbitrageEngin/payload1.js';
 import { MIN_TRADE_AMOUNTS, TOKEN_SYMBOLS } from '../config/index.js';
 
-const wsProvider = ws.getProvider();
+// ==================== PARALLEL PROCESSING IMPORTS ====================
+import { getGasOracle } from '../utils/gasOracle.js';
+import performanceMonitor from '../utils/performanceMonitor.js';
+
+// ==================== PROVIDER SETUP (SmartRPCRouter) ====================
+// Provider will be passed as function parameter
 let flashbotExecutor = null;
-const ws2Provider = new ethers.WebSocketProvider(process.env.WS_URL_2 || process.env.WS_URL);
 const EXECUTION_TIMEOUT = 60000; // 60 seconds timeout for transaction confirmation
 
 // Minimum trade amounts for profitability
@@ -26,16 +29,20 @@ const EXECUTION_TIMEOUT = 60000; // 60 seconds timeout for transaction confirmat
 // Token address to symbol mapping (add more as needed)
 
 
-async function getFlashbotExecutor() {
+async function getFlashbotExecutor(provider) {
   if (flashbotExecutor) return flashbotExecutor;
   const privateKey = process.env.PRIVATE_KEY;
   if (!privateKey) {
     logger.warn('FlashbotExecutor not initialized: PRIVATE_KEY missing', { service: 'executionLayer' });
     return null;
   }
+  if (!provider) {
+    logger.error('Provider is required for FlashbotExecutor initialization', { service: 'executionLayer' });
+    return null;
+  }
   try {
-    const wallet = new ethers.Wallet(privateKey, ws2Provider);
-    flashbotExecutor = new FlashbotExecutor(ws2Provider, wallet, {
+    const wallet = new ethers.Wallet(privateKey, provider);
+    flashbotExecutor = new FlashbotExecutor(provider, wallet, {
       contractAddress: process.env.ARBITRAGE_CONTRACT_ADDRESS,
       flashbotsRelay: process.env.FLASHBOTS_RELAY
     });
@@ -129,7 +136,10 @@ async function isProfitableAfterGas(opportunity, provider, gasEstimate = 400000n
   }
 }
 
-export async function executeOpportunities() {
+export async function executeOpportunities(provider) {
+  if (!provider) {
+    throw new Error('Provider is required for executeOpportunities');
+  }
 
   while (true) {
     const lock = await redis.get('execution_lock');
@@ -150,7 +160,7 @@ export async function executeOpportunities() {
 
       logger.info(`Consuming opportunity: ${opp.key}, { service: 'executionLayerV3' }`);
 
-      // const executor = await getFlashbotExecutor();
+      // const executor = await getFlashbotExecutor(provider);
       // if (!executor) {
       //   await completeOpportunity(opp.key, false, null);
       //   continue;
@@ -158,9 +168,9 @@ export async function executeOpportunities() {
       const FlashLoan = true
       let execution_payload;
       if (FlashLoan === true) {
-        execution_payload = await createFlashLoanPayload(opp, ws2Provider);
+        execution_payload = await createFlashLoanPayload(opp, provider);
       } else {
-        execution_payload = await createDirectExecutionPayload(opp, ws2Provider)
+        execution_payload = await createDirectExecutionPayload(opp, provider)
       }
 
 
@@ -214,12 +224,12 @@ export async function executeOpportunities() {
         if (execOpp.estimated_profit !== undefined) {
 
           if (FlashLoan) {
-             execute = await executeFlashLoanTransaction(execOpp, ws2Provider, opp)
+             execute = await executeFlashLoanTransaction(execOpp, provider, opp)
             console.log("execute", execute)
           }
           else {
 
-           execute = await executeTransaction(execOpp, ws2Provider)
+           execute = await executeTransaction(execOpp, provider)
 
             console.log("execute", execute)
           }
@@ -739,7 +749,8 @@ export async function executeTransaction(payload, provider) {
       finalMaxPriorityFeePerGas = FLOOR_PRIORITY_FEE;
 
       // maxFeePerGas = baseFee * 2 + priority (EIP-1559 rule), but enforce floor
-      const suggestedMaxFee = gasPrices.baseFee * 2n + FLOOR_PRIORITY_FEE;
+      const currentBaseFee = gasPrices.predictedBaseFee || gasPrices.baseFee || gasPrices.maxFeePerGas;
+      const suggestedMaxFee = currentBaseFee * 2n + FLOOR_PRIORITY_FEE;
       finalMaxFeePerGas = suggestedMaxFee > FLOOR_MAX_FEE ? suggestedMaxFee : FLOOR_MAX_FEE;
     } else {
       // Normal case: use network suggestions
@@ -1084,11 +1095,34 @@ export async function executeFlashLoanTransaction(payload, provider, opp = null)
     const gasToUse = (gasEstimate * BigInt(130)) / BigInt(100); // 30% buffer for safety
     logger.info(`Gas to use (with 30% buffer): ${gasToUse.toString()}, { service: 'flashLoanExecutionLayer' }`);
 
-    // Calculate optimal gas prices with priority fee (with profit-based priority)
-    const gasPrices = await calculateGasPrices(provider, payload.estimated_profit || 0);
+    // ==================== USE GAS ORACLE FOR OPTIMAL PRICING ====================
+    let gasPrices;
+    try {
+      // Try to use Gas Oracle if parallel processing is enabled
+      const gasOracle = getGasOracle();
+      const estimatedProfitWei = ethers.parseEther(payload.estimated_profit?.toString() || '0');
+      gasPrices = gasOracle.getOptimalGasPrices(estimatedProfitWei);
+
+      logger.info('✅ Gas prices from Gas Oracle:', {
+        maxFeePerGas: ethers.formatUnits(gasPrices.maxFeePerGas, 'gwei') + ' Gwei',
+        maxPriorityFeePerGas: ethers.formatUnits(gasPrices.maxPriorityFeePerGas, 'gwei') + ' Gwei',
+        predictedBaseFee: ethers.formatUnits(gasPrices.predictedBaseFee, 'gwei') + ' Gwei',
+        confidence: gasPrices.confidence,
+        service: 'flashLoanExecutionLayer'
+      });
+    } catch (error) {
+      // Fallback to old method if Gas Oracle not initialized
+      logger.warn('Gas Oracle not available, using fallback gas calculation', {
+        error: error.message,
+        service: 'flashLoanExecutionLayer'
+      });
+      gasPrices = await calculateGasPrices(provider, payload.estimated_profit || 0);
+    }
 
     // === LOW BASE FEE PROTECTION (< 0.5 Gwei) ===
-    const baseFeeGwei = Number(ethers.formatUnits(gasPrices.baseFee, 'gwei'));
+    const baseFeeGwei = gasPrices.predictedBaseFee
+      ? Number(ethers.formatUnits(gasPrices.predictedBaseFee, 'gwei'))
+      : Number(ethers.formatUnits(gasPrices.baseFee || gasPrices.maxFeePerGas, 'gwei'));
     const MIN_BASE_FEE_THRESHOLD = 0.5; // Gwei
     const FLOOR_PRIORITY_FEE = ethers.parseUnits('2', 'gwei'); // 2 Gwei tip
     const FLOOR_MAX_FEE = ethers.parseUnits('2.1', 'gwei'); // 2.1 Gwei cap
@@ -1103,7 +1137,8 @@ export async function executeFlashLoanTransaction(payload, provider, opp = null)
       finalMaxPriorityFeePerGas = FLOOR_PRIORITY_FEE;
 
       // maxFeePerGas = baseFee * 2 + priority (EIP-1559 rule), but enforce floor
-      const suggestedMaxFee = gasPrices.baseFee * 2n + FLOOR_PRIORITY_FEE;
+      const currentBaseFee = gasPrices.predictedBaseFee || gasPrices.baseFee || gasPrices.maxFeePerGas;
+      const suggestedMaxFee = currentBaseFee * 2n + FLOOR_PRIORITY_FEE;
       finalMaxFeePerGas = suggestedMaxFee > FLOOR_MAX_FEE ? suggestedMaxFee : FLOOR_MAX_FEE;
     } else {
       // Normal case: use network suggestions

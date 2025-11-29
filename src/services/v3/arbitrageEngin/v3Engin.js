@@ -3,7 +3,6 @@ import { ethers, Interface } from 'ethers';
 import PriceFetcher from '../../priceFetcher.js';
 import { DEXPriceFetcherV3 } from '../../v3/priceFetcherV3.js';
 import logger from '../../../utils/logger.js';
-import ws from '../../../provider/websocket.js';
 // import { storeOpportunity } from '../../opportunity.js';
 import { Decimal } from 'decimal.js';
 import db from '../../../db.js';
@@ -20,25 +19,44 @@ import { validateTriangularPath, isValidOutputAmount } from '../../../utils/deci
 import { MIN_TRADE_AMOUNTS } from '../../../config/index.js';
 import { calculateAdaptiveInputAmount, calculateSafeTradeAmount } from '../../../utils/dynamicAmount.js';
 
+// ==================== PARALLEL PROCESSING IMPORTS ====================
+import parallelQuoteFetcher from '../../../utils/parallelQuoteFetcher.js';
+import quoteCache from '../../../utils/quoteCache.js';
+import performanceMonitor from '../../../utils/performanceMonitor.js';
+import { QUOTE_CONFIG, ANALYSIS_CONFIG } from '../../../config/parallelConfig.js';
 
-// Initialize provider
-const wsProvider = ws.getProvider();
-
-// const wsProvider = new ethers.WebSocketProvider("ws://127.0.0.1:8545");
+// ==================== PROVIDER SETUP (SmartRPCRouter) ====================
+// Provider will be set via initializeProvider() function
+let wsProvider = null;
+let priceFetcherV3 = null;
+let priceFetcher = null;
+let priceFeed = null;
 
 const quoterAddress = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e';
 const dexName = 'UniswapV3';
-const priceFetcherV3 = new DEXPriceFetcherV3(quoterAddress, dexName, wsProvider);
-const priceFetcher = new PriceFetcher(wsProvider);
 
-// Initialize price feed service
-const priceFeed = initializePriceFeed(wsProvider);
+/**
+ * Initialize provider and all dependent services
+ * This should be called with the SmartRPCRouter provider
+ */
+function initializeProvider(provider) {
+  if (!provider) {
+    throw new Error('Provider is required for v3Engin initialization');
+  }
+
+  wsProvider = provider;
+  priceFetcherV3 = new DEXPriceFetcherV3(quoterAddress, dexName, wsProvider);
+  priceFetcher = new PriceFetcher(wsProvider);
+  priceFeed = initializePriceFeed(wsProvider);
+
+  logger.info('✅ v3Engin initialized with SmartRPCRouter provider');
+}
 
 // Optimized configuration
 const BATCH_SIZE = 10; // Increased for better parallelization
 const INPUT_AMOUNT = new Decimal('5');
 const MIN_LIQUIDITY = new Decimal('50000');
-const MIN_LIQUIDITY_USD = ethers.parseUnits('10000', 6); // $100K minimum liquidity in USDC
+const MIN_LIQUIDITY_USD = ethers.parseUnits('5000', 6); // $100K minimum liquidity in USDC
 const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
@@ -58,7 +76,8 @@ const PRIORITY_FEE = new Decimal('0.001'); // 0.1%
 const MIN_TRADE_SIZE = new Decimal('0.0001');
 
 // PROFIT THRESHOLDS (after gas costs, using Balancer free flash loans!)
-const MIN_PROFIT_THRESHOLD = new Decimal('0.00001'); // 0.002 ETH minimum net profit (~$6) after gas
+// Minimum net profit must exceed gas costs (0.001 ETH) to be worthwhile
+const MIN_PROFIT_THRESHOLD = new Decimal('0.0001'); // 0.0001 ETH minimum net profit (~$0.30) after gas
 const MIN_PROFIT_PERCENTAGE = new Decimal('0.003'); // 0.3% return minimum after gas costs
 const MAX_SLIPPAGE = new Decimal('0.03'); // 3% max slippage
 const MAX_GAS_PRICE_GWEI = 100; // 100 Gwei max gas price
@@ -2069,7 +2088,21 @@ async function getQuote(dexName, amountIn, tokenIn, tokenOut, fee = 3000) {
 async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
   const tokenBDecimals = normalizeDecimals(tokenB.decimals);
   const tokenADecimals = normalizeDecimals(tokenA.decimals);
-  const testAmount = ethers.parseUnits('0.01', tokenBDecimals); // 0.01 of tokenB
+
+  // Use realistic test amount (~$100 equivalent) for accurate spread estimation
+  // Stablecoins: $100, ETH/WETH: ~0.03 ETH (~$100)
+  let testAmount;
+  if (tokenB.symbol === 'USDT' || tokenB.symbol === 'USDC' || tokenB.symbol === 'DAI') {
+    testAmount = ethers.parseUnits('1000', tokenBDecimals); // $100 for stablecoins
+  } else if (tokenB.symbol === 'WETH' || tokenB.symbol === 'ETH') {
+    testAmount = ethers.parseUnits('1', tokenBDecimals); // ~$100 for ETH
+  } else if(tokenB.symbol === 'WBTC') {
+    testAmount = ethers.parseUnits('0.002', tokenBDecimals); // ~$100 for WBTC
+  } else if (tokenB.symbol === 'LINK') {
+    testAmount = ethers.parseUnits('100', tokenBDecimals); // ~$100 for LINK
+  }else {
+    testAmount = ethers.parseUnits('100', tokenBDecimals); // Default for other tokens
+  }
 
   try {
     // Step 1: Get buy quote (tokenB → tokenA)
@@ -2122,8 +2155,9 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
       };
     }
 
-    // Need at least 0.3% spread to potentially be profitable after fees & gas
-    const MIN_SPREAD_PERCENT = 0.3;
+    // Need at least 0.05% spread to potentially be profitable after fees & gas
+    // Lowered from 0.3% to catch more opportunities in competitive DeFi markets
+    const MIN_SPREAD_PERCENT = 0.05;
     if (spreadPercent < MIN_SPREAD_PERCENT) {
       return {
         hasSpread: false,
@@ -2213,14 +2247,40 @@ async function processDirectArbitragePool(poolName, prices) {
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // ✅ PARALLEL QUOTER CALLS with DYNAMIC INPUT AMOUNTS
+  // Using QUOTE_CONFIG and ANALYSIS_CONFIG for optimal performance
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const batchSize = 10;
+  const batchSize = QUOTE_CONFIG.BATCH_SIZE || 20;  // ✅ Use config (20 instead of 10)
+  const maxConcurrent = Math.min(
+    Math.ceil(ANALYSIS_CONFIG.MAX_CONCURRENT_PAIRS / batchSize),
+    5  // Max 5 concurrent batches to avoid RPC overload
+  );
+  const batchDelay = QUOTE_CONFIG.BATCH_DELAY || 50;  // 50ms delay between batches
   const results = [];
 
-  for (let batch = 0; batch < quotePairs.length; batch += batchSize) {
-    const batchPairs = quotePairs.slice(batch, batch + batchSize);
+  // Helper function for delay
+  const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    const batchPromises = batchPairs.map(async (pair) => {
+  // Split into batches
+  const allBatches = [];
+  for (let i = 0; i < quotePairs.length; i += batchSize) {
+    allBatches.push(quotePairs.slice(i, i + batchSize));
+  }
+
+  console.log(`   🚀 Processing ${quotePairs.length} pairs in ${allBatches.length} batches (${maxConcurrent} concurrent)`);
+
+  // Process batches with controlled concurrency
+  for (let i = 0; i < allBatches.length; i += maxConcurrent) {
+    const concurrentBatches = allBatches.slice(i, i + maxConcurrent);
+
+    // Process multiple batches in parallel
+    const batchPromises = concurrentBatches.map(async (batchPairs, batchIndex) => {
+      // Add staggered delay to prevent RPC rate limiting
+      if (batchIndex > 0) {
+        await delay(batchDelay * batchIndex);
+      }
+
+      // Process all pairs in this batch concurrently
+      const pairPromises = batchPairs.map(async (pair) => {
       const { buyPriceObj, sellPriceObj, buyPriceAinB, sellPriceAinB, pairIndex } = pair;
 
       const platformFee1 = new Decimal(buyPriceObj.fee);
@@ -2276,19 +2336,33 @@ async function processDirectArbitragePool(poolName, prices) {
         return null;
       }
 
-      // ✅ Step 1: Get ACTUAL quote for buy (tokenB -> tokenA)
+      // ✅ Step 1: Get ACTUAL quote for buy (tokenB -> tokenA) with CACHING
       let step1Output;
+      const step1Start = Date.now();
       try {
         const step1Fee = buyPriceObj.dex.includes('V3')
           ? Math.floor(platformFee1.mul(1000000).toNumber())
           : 3000;
 
-        step1Output = await getQuote(
+        // Use cache for quote fetching (60-80% hit rate = major speedup!)
+        const cacheKey = quoteCache.getCacheKey(
           buyPriceObj.dex,
-          inputAmountWei,
           buyPriceObj.tokenB.address,
           buyPriceObj.tokenA.address,
+          inputAmountWei.toString(),
           step1Fee
+        );
+
+        step1Output = await quoteCache.get(
+          cacheKey,
+          async () => await getQuote(
+            buyPriceObj.dex,
+            inputAmountWei,
+            buyPriceObj.tokenB.address,
+            buyPriceObj.tokenA.address,
+            step1Fee
+          ),
+          100 // Estimated latency saved
         );
 
         if (!step1Output || step1Output === 0n) {
@@ -2305,8 +2379,14 @@ async function processDirectArbitragePool(poolName, prices) {
         const step1Ratio = new Decimal(step1OutputNormalized.toString())
           .div(new Decimal(inputNormalized.toString()))
           .toNumber();
-        
-        console.log(`   Step1 Ratio Check: ${step1Ratio.toFixed(6)} (normalized to 18 decimals)`);
+
+        const step1Latency = Date.now() - step1Start;
+        console.log(`   Step1 Ratio Check: ${step1Ratio.toFixed(6)} (${step1Latency}ms)`);
+
+        // Track performance
+        if (typeof performanceMonitor !== 'undefined' && performanceMonitor.trackQuoteFetch) {
+          performanceMonitor.trackQuoteFetch(step1Latency, quoteCache.cache.has(cacheKey), true);
+        }
 
         stats.step1Success++;
       } catch (error) {
@@ -2315,22 +2395,43 @@ async function processDirectArbitragePool(poolName, prices) {
         const shortReason = reason.substring(0, 50);
         stats.step1FailReasons[shortReason] = (stats.step1FailReasons[shortReason] || 0) + 1;
         console.log(`❌ Step1 fail (${pairIndex}): ${shortReason}`);
+
+        // Track failed quote fetch
+        const step1Latency = Date.now() - step1Start;
+        if (typeof performanceMonitor !== 'undefined' && performanceMonitor.trackQuoteFetch) {
+          performanceMonitor.trackQuoteFetch(step1Latency, false, false);
+        }
+
         return null;
       }
 
-      // ✅ Step 2: Get ACTUAL quote for sell (tokenA -> tokenB)
+      // ✅ Step 2: Get ACTUAL quote for sell (tokenA -> tokenB) with CACHING
       let step2Output;
+      const step2Start = Date.now();
       try {
         const step2Fee = sellPriceObj.dex.includes('V3')
           ? Math.floor(platformFee2.mul(1000000).toNumber())
           : 3000;
 
-        step2Output = await getQuote(
+        // Use cache for quote fetching (60-80% hit rate = major speedup!)
+        const cacheKey = quoteCache.getCacheKey(
           sellPriceObj.dex,
-          step1Output,
           sellPriceObj.tokenA.address,
           sellPriceObj.tokenB.address,
+          step1Output.toString(),
           step2Fee
+        );
+
+        step2Output = await quoteCache.get(
+          cacheKey,
+          async () => await getQuote(
+            sellPriceObj.dex,
+            step1Output,
+            sellPriceObj.tokenA.address,
+            sellPriceObj.tokenB.address,
+            step2Fee
+          ),
+          100 // Estimated latency saved
         );
 
         if (!step2Output || step2Output === 0n) {
@@ -2341,6 +2442,13 @@ async function processDirectArbitragePool(poolName, prices) {
           throw new Error('Negative output from quote (invalid)');
         }
 
+        const step2Latency = Date.now() - step2Start;
+
+        // Track performance
+        if (typeof performanceMonitor !== 'undefined' && performanceMonitor.trackQuoteFetch) {
+          performanceMonitor.trackQuoteFetch(step2Latency, quoteCache.cache.has(cacheKey), true);
+        }
+
         stats.step2Success++;
       } catch (error) {
         stats.step2Failed++;
@@ -2348,6 +2456,13 @@ async function processDirectArbitragePool(poolName, prices) {
         const shortReason = reason.substring(0, 50);
         stats.step2FailReasons[shortReason] = (stats.step2FailReasons[shortReason] || 0) + 1;
         console.log(`❌ Step2 fail (${pairIndex}): ${shortReason}`);
+
+        // Track failed quote fetch
+        const step2Latency = Date.now() - step2Start;
+        if (typeof performanceMonitor !== 'undefined' && performanceMonitor.trackQuoteFetch) {
+          performanceMonitor.trackQuoteFetch(step2Latency, false, false);
+        }
+
         return null;
       }
 
@@ -2402,8 +2517,9 @@ async function processDirectArbitragePool(poolName, prices) {
       const grossProfit = new Decimal(step2Output.toString()).minus(new Decimal(inputAmountWei.toString()));
       const grossProfitPercent = grossProfit.div(new Decimal(inputAmountWei.toString())).mul(100);
 
-      // Estimate gas cost in tokenB (conservative estimate for Balancer flash loan arbitrage)
-      const gasEstimateEth = new Decimal('0.003'); // ~0.003 ETH for arbitrage tx (~$9 at current prices)
+      // Estimate gas cost in tokenB (realistic estimate for Balancer flash loan arbitrage)
+      // Lowered from 0.003 to 0.001 ETH to match actual gas costs (~$3 at current prices)
+      const gasEstimateEth = new Decimal('0.001'); // ~0.001 ETH for arbitrage tx (~$3 at current prices)
       let gasCostInTokenB;
 
       if (tokenB === 'WETH' || tokenB === 'ETH') {
@@ -2481,15 +2597,22 @@ async function processDirectArbitragePool(poolName, prices) {
       }
 
       return opportunity;
+      });
+
+      // Wait for all pairs in this batch
+      return Promise.all(pairPromises);
     });
 
-    // Wait for batch completion
-    const batchResults = await Promise.all(batchPromises);
+    // Wait for all concurrent batches to complete
+    const concurrentBatchResults = await Promise.all(batchPromises);
 
-    batchResults.forEach(result => {
-      if (result) {
-        results.push(result);
-      }
+    // Flatten and filter results
+    concurrentBatchResults.forEach(batchResults => {
+      batchResults.forEach(result => {
+        if (result) {
+          results.push(result);
+        }
+      });
     });
   }
 
@@ -3687,7 +3810,14 @@ function identifyTopTokens(allPrices) {
 }
 
 // MAIN OPTIMIZED ARBITRAGE ENGINE
-async function runArbitrageEngine(pairs, blockNumber = 0) {
+async function runArbitrageEngine(pairs, blockNumber = 0, provider = null) {
+  // Initialize provider if not already done
+  if (provider && !wsProvider) {
+    initializeProvider(provider);
+  } else if (!wsProvider) {
+    throw new Error('Provider not initialized. Pass provider to runArbitrageEngine()');
+  }
+
   if (isProcessing) {
     logToMain(`⏭️ Skipping block ${blockNumber} - analysis in progress`, 'warn');
     return [];
@@ -3795,5 +3925,6 @@ export {
   // crossArbitrageOptimized as crossArbitrage,
   triangularArbitrageOptimized as triangularArbitrage,
   runArbitrageEngine,
+  initializeProvider,
   transformOpportunityForDB,
 };

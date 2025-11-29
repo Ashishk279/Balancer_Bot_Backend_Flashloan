@@ -56,6 +56,10 @@ function error(message, data) {
     log('error', message, data);
 }
 
+function debug(message, data) {
+    log('debug', message, data);
+}
+
 async function logArbitrage(opportunity) {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] ARBITRAGE OPPORTUNITY
@@ -81,4 +85,5 @@ export default {
     info,
     warn,
     error,
+    debug,
 };

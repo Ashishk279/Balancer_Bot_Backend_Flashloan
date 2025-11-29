@@ -63,7 +63,7 @@ function initializeProvider(provider) {
 const BATCH_SIZE = 10; // Increased for better parallelization
 const INPUT_AMOUNT = new Decimal('5');
 const MIN_LIQUIDITY = new Decimal('50000');
-const MIN_LIQUIDITY_USD = ethers.parseUnits('10000', 6); // $100K minimum liquidity in USDC
+const MIN_LIQUIDITY_USD = ethers.parseUnits('10000', 6); // $10K minimum liquidity in USDC
 const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
@@ -1034,6 +1034,31 @@ async function fetchAllPricesOptimized1(pairs, batchSize = 10) {
 
   console.log(`Collected ${v3Queries.length} valid V3 queries and ${v2Queries.length} valid V2 queries`);
 
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🔍 DEBUG: Show which queries were collected for specific pairs
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  console.log(`\n📊 QUERY COLLECTION DEBUG:`);
+  const queryPairs = new Map();
+  [...v3Queries, ...v2Queries].forEach(q => {
+    const pairKey = q.poolName;
+    if (!queryPairs.has(pairKey)) {
+      queryPairs.set(pairKey, []);
+    }
+    queryPairs.get(pairKey).push(q.dexName);
+  });
+
+  console.log(`\n🎯 Queries collected for specific pairs:`);
+  const checkPairs = ['DAI/WETH', 'WBTC/WETH', 'USDC/WETH', 'WETH/USDC'];
+  for (const pairName of checkPairs) {
+    const queries = queryPairs.get(pairName);
+    if (queries) {
+      console.log(`  ✅ ${pairName}: ${queries.length} queries (${queries.join(', ')})`);
+    } else {
+      console.log(`  ❌ ${pairName}: NO queries collected (pair might not exist in config or failed validation)`);
+    }
+  }
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+
   // Batch fetch prices using slot0() multicall for V3
   const v3Prices = await priceFetcherV3.getPricesBatchedV3(v3Queries, 20);
   const v2Prices = await priceFetcher.getPoolPricesBatchedV2(v2Queries, 20);
@@ -1046,6 +1071,37 @@ async function fetchAllPricesOptimized1(pairs, batchSize = 10) {
   );
 
   console.log(`Fetched ${allPrices.length} total prices (V3: ${v3Prices.length}, V2: ${v2Prices.length})`);
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🔍 DEBUG: Show which pairs were actually fetched
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  console.log(`\n📊 FETCHED PRICES DEBUG:`);
+  const fetchedPairs = new Map();
+  allPrices.forEach(p => {
+    const pairKey = p.poolName || `${p.tokenA?.symbol}/${p.tokenB?.symbol}`;
+    if (!fetchedPairs.has(pairKey)) {
+      fetchedPairs.set(pairKey, []);
+    }
+    fetchedPairs.get(pairKey).push({ dex: p.dex, price: p.priceOfAinB });
+  });
+
+  // Show specific pairs
+  console.log(`\n🎯 Checking specific pairs in fetched prices:`);
+  const checkPairsToInspect = ['DAI/WETH', 'WBTC/WETH', 'USDC/WETH', 'WETH/USDC'];
+  for (const pairName of checkPairsToInspect) {
+    const fetched = fetchedPairs.get(pairName);
+    if (fetched) {
+      console.log(`  ✅ ${pairName}: ${fetched.length} prices fetched`);
+      fetched.forEach(({ dex, price }) => {
+        console.log(`     - ${dex}: ${price}`);
+      });
+    } else {
+      console.log(`  ❌ ${pairName}: NOT fetched (0 prices)`);
+    }
+  }
+
+  console.log(`\nTotal unique pairs fetched: ${fetchedPairs.size}`);
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 
   // ==========================================
   // ENHANCED LIQUIDITY FETCHING
@@ -1345,6 +1401,45 @@ async function directArbitrageOptimized(allPrices) {
   }
 
   timer.checkpoint('Prices grouped by pool');
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🔍 DEBUG: Show how many pools each pair has
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  console.log(`\n📊 PAIR GROUPING DEBUG:`);
+  console.log(`Total unique pool names: ${pricesByPool.size}`);
+
+  // Show all pairs and their pool counts
+  const pairCounts = [];
+  for (const [poolName, prices] of pricesByPool.entries()) {
+    pairCounts.push({ poolName, count: prices.length, dexes: prices.map(p => p.dex) });
+  }
+
+  // Sort by count descending
+  pairCounts.sort((a, b) => b.count - a.count);
+
+  // Show all pairs
+  console.log(`\n🔍 All pairs (sorted by pool count):`);
+  pairCounts.forEach(({ poolName, count, dexes }) => {
+    const status = count >= 2 ? '✅' : '❌';
+    console.log(`  ${status} ${poolName} (${count} pools): ${dexes.join(', ')}`);
+  });
+
+  // Highlight specific pairs we're interested in
+  console.log(`\n🎯 Specific pairs of interest:`);
+  const pairsToCheck = ['DAI/WETH', 'WBTC/WETH', 'USDC/WETH', 'WETH/USDC'];
+  for (const pairName of pairsToCheck) {
+    const pairData = pairCounts.find(p => p.poolName === pairName);
+    if (pairData) {
+      console.log(`  ${pairData.count >= 2 ? '✅' : '❌'} ${pairName}: ${pairData.count} pools (${pairData.dexes.join(', ')})`);
+    } else {
+      console.log(`  ⚠️  ${pairName}: NOT FOUND in allPrices`);
+    }
+  }
+
+  const filteredOut = pairCounts.filter(p => p.count < 2);
+  console.log(`\n⚠️  ${filteredOut.length} pairs filtered out (< 2 pools)`);
+  console.log(`✅ ${pairCounts.length - filteredOut.length} pairs will be analyzed (>= 2 pools)`);
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 
   // Process pools in parallel
   const poolPromises = Array.from(pricesByPool.entries())

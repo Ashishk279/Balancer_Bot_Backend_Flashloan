@@ -338,7 +338,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.ANKR.address),
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0x5201883feeb05822CE25c9Af8Ab41Fc78Ca73fA9' },
       UniswapV3_3000: { fee: 3000, address: '0x13dC0a39dc00F394E030B97b0B569dedBe634c0d' },
       PancakeswapV3_10000: { fee: 10000, address: '0x0D5904169c549C9FD9FE796450C5450460c15F2c' },
     }
@@ -381,7 +380,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.BAL.address),
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0xA70d458A4d9Bc0e6571565faee18a48dA5c0D593' },
       UniswapV3_3000: { fee: 3000, address: '0xDC2c21F1B54dDaF39e944689a8f90cb844135cc9' },
     }
   },
@@ -518,19 +516,6 @@ export const DIRECT_SWAP_PAIRS = [
     }
   },
 
-  // DAI/UNI
-  {
-    name: 'UNI/DAI',
-    token0: getTokenInfo(TOKENS.UNI.address),
-    token1: getTokenInfo(TOKENS.DAI.address),
-    pools: {
-      UniswapV2: { fee: 0, address: '0xf00e80f0DE9aEa0B33aA229a4014572777E422EE' },
-      UniswapV3_500: { fee: 500, address: '0x57D7d040438730d4029794799dEEd8601E23fF80' },
-      UniswapV3_3000: { fee: 3000, address: '0x7cf70eD6213F08b70316bD80F7c2ddDc94E41aC5' },
-      UniswapV3_10000: { fee: 10000, address: '0xD6993E525FAdB23971a20bBb057Af9841eAE076F' },
-    }
-  },
-
   // DAI/USDC
   {
     name: 'DAI/USDC',
@@ -562,7 +547,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.DAI.address),
     token1: getTokenInfo(TOKENS.WBTC.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0x231B7589426Ffe1b75405526fC32aC09D44364c4' },
       UniswapV3_3000: { fee: 3000, address: '0x391e8501b626c623d39474afca6f9e46c2686649' }
     }
   },
@@ -575,11 +559,7 @@ export const DIRECT_SWAP_PAIRS = [
     pools: {
       UniswapV2: { fee: 0, address: '0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11' },
       SushiswapV2: { fee: 0, address: '0xC3D03e4F041Fd4cD388c549Ee2A29a9E5075882f' },
-      UniswapV3_500: { fee: 500, address: '0x60594a405d53811d3BC4766596EFD80fd545A270' },
       SushiswapV3_500: { fee: 500, address: '0xabb097C772AcDc0b743EF85c59040E9bD8F8bDa4'  },
-      UniswapV3_3000: { fee: 3000, address: '0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8' },
-      SushiswapV3_3000: { fee: 3000, address: '0x769DB46F39C42ee7AD5f71F4167c47EdD281E767' },
-      UniswapV3_10000: { fee: 10000, address: '0xa80964C5bBd1A0E95777094420555fead1A26c1e' },
     }
   },
 
@@ -632,7 +612,6 @@ export const DIRECT_SWAP_PAIRS = [
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
       SushiswapV2: { fee: 0, address: '0x0E26A21013f2F8C0362cFae608b4e69a249D5EFc' },
-      UniswapV3_3000: { fee: 3000, address: '0x64652315D86f5dfAE30885FBD29D1da05b63ADD7' },
       UniswapV3_10000: { fee: 10000, address: '0x3B685307C8611AFb2A9E83EBc8743dc20480716E' },
     }
   },
@@ -643,7 +622,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.FXS.address),
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
-      UniswapV3_3000: { fee: 3000, address: '0x39c9E3128b8736e02A30B2B9b7E50FF522b935c5' },
       UniswapV3_10000: { fee: 10000, address: '0xCD8286b48936cDAC20518247dBD310ab681A9fBf' },
     }
   },
@@ -705,16 +683,6 @@ export const DIRECT_SWAP_PAIRS = [
     }
   },
 
-  // LDO/USDT
-  {
-    name: 'LDO/USDT',
-    token0: getTokenInfo(TOKENS.LDO.address),
-    token1: getTokenInfo(TOKENS.USDT.address),
-    pools: {
-      UniswapV3_3000: { fee: 3000, address: '0xd296B77f1CAD3F0eC64Ae00cdbFa749E24b1f9cb' },
-    }
-  },
-
   // LDO/WETH
   {
     name: 'LDO/WETH',
@@ -734,9 +702,7 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.LINK.address),
     token1: getTokenInfo(TOKENS.UNI.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0x9b2662DC8b80B0fE79310AD316b943CB5Bb15e8b' },
       UniswapV3_3000: { fee: 3000, address: '0x9f178e86E42DDF2379CB3D2AcF9Ed67A1eD2550a' },
-      UniswapV3_10000: { fee: 10000, address: '0xA6B9a13B34db2A00284299c47DACF49FB62C1755' },
     }
   },
 
@@ -827,7 +793,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.MATIC.address),
     token1: getTokenInfo(TOKENS.USDT.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0x88C095C8Ba2C7A1353cF3D21E692c5d4d0F90793' },
       UniswapV3_3000: { fee: 3000, address: '0x68F73e2180024DB5B54E0E119d4F5128953F9417' },
     }
   },
@@ -839,7 +804,6 @@ export const DIRECT_SWAP_PAIRS = [
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
       UniswapV2: { fee: 0, address: '0x819f3450dA6f110BA6Ea52195B3beaFa246062dE' },
-      SushiswapV2: { fee: 0, address: '0x7f8F7Dd53D1F3ac1052565e3ff451D7fE666a311' },
       UniswapV3_500: { fee: 500, address: '0xe3baA96aD46457d9e6cDD4e32ABC11e2C124eC49' },
       UniswapV3_3000: { fee: 3000, address: '0x290A6a7460B308ee3F19023D2D00dE604bcf5B42' },
       UniswapV3_10000: { fee: 10000, address: '0x99C7550be72F05ec31c446cD536F8a29C89fdB77' },
@@ -965,8 +929,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.REN.address),
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0x8Bd1661Da98EBDd3BD080F0bE4e6d9bE8cE9858c' },
-      SushiswapV2: { fee: 0, address: '0x611CDe65deA90918c0078ac0400A72B0D25B9bb1' },
       UniswapV3_3000: { fee: 3000, address: '0x2dD56b633FAa1A5B46107d248714C9cCB6e20920' },
       SushiswapV3_3000: { fee: 3000, address: '0xBF9760b95639f23202425B9feEdE894224A5a7Ed' },
     }
@@ -979,7 +941,6 @@ export const DIRECT_SWAP_PAIRS = [
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
       UniswapV3_3000: { fee: 3000, address: '0xe42318eA3b998e8355a3Da364EB9D48eC725Eb45' },
-      UniswapV3_10000: { fee: 10000, address: '0xcf15aD9bE9d33384B74b94D63D06B4A9Bd82f640' },
     }
   },
 
@@ -1085,37 +1046,6 @@ export const DIRECT_SWAP_PAIRS = [
     }
   },
 
-  // STORJ/USDC
-  {
-    name: 'STORJ/USDC',
-    token0: getTokenInfo(TOKENS.STORJ.address),
-    token1: getTokenInfo(TOKENS.USDC.address),
-    pools: {
-      UniswapV3_10000: { fee: 10000, address: '0xccCE35F1EaCf0acC67e2FE5BB0d608192Ccc36f8' },
-    }
-  },
-
-  // STORJ/USDT
-  {
-    name: 'STORJ/USDT',
-    token0: getTokenInfo(TOKENS.STORJ.address),
-    token1: getTokenInfo(TOKENS.USDT.address),
-    pools: {
-      UniswapV3_10000: { fee: 10000, address: '0x2530CeFf321206c0331379B69D565e6D60FABA8C' },
-    }
-  },
-
-  // STORJ/WETH
-  {
-    name: 'STORJ/WETH',
-    token0: getTokenInfo(TOKENS.STORJ.address),
-    token1: getTokenInfo(TOKENS.WETH.address),
-    pools: {
-      UniswapV2: { fee: 0, address: '0xAEF16913b6C50EBCf627a394921F306985FC8604' },
-      UniswapV3_10000: { fee: 10000, address: '0xB29148f6eA9F2d78BA9B2d6b30AF37AfDcC31a9E' },
-    }
-  },
-
   // SUSHI/USDC
   {
     name: 'SUSHI/USDC',
@@ -1136,7 +1066,6 @@ export const DIRECT_SWAP_PAIRS = [
       SushiswapV2: { fee: 0, address: '0x795065dCc9f64b5614C407a6EFDC400DA6221FB0' },
       UniswapV3_3000: { fee: 3000, address: '0x73A6a761FE483bA19DeBb8f56aC5bbF14c0cdad1' },
       SushiswapV3_3000: { fee: 3000, address: '0x87C7056BBE6084f03304196Be51c6B90B6d85Aa2' },
-      UniswapV3_10000: { fee: 10000, address: '0x19E286157200418d6A1f7D1df834b82E65C920AA' },
     }
   },
 
@@ -1146,7 +1075,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.UMA.address),
     token1: getTokenInfo(TOKENS.WETH.address),
     pools: {
-      UniswapV2: { fee: 0, address: '0x88D97d199b9ED37C29D846d00D443De980832a22' },
       SushiswapV2: { fee: 0, address: '0x001b6450083E531A5a7Bf310BD2c1Af4247E23D4' },
       UniswapV3_3000: { fee: 3000, address: '0x157Dfa656Fdf0D18E1bA94075a53600D81cB3a97' },
     }
@@ -1159,7 +1087,6 @@ export const DIRECT_SWAP_PAIRS = [
     token1: getTokenInfo(TOKENS.USDC.address),
     pools: {
       UniswapV3_3000: { fee: 3000, address: '0xD0fC8bA7E267f2bc56044A7715A489d851dC6D78' },
-      UniswapV3_10000: { fee: 10000, address: '0xE845469aAe04f8823202b011A848cf199420B4C1' },
     }
   },
 
@@ -1206,7 +1133,6 @@ export const DIRECT_SWAP_PAIRS = [
       UniswapV2: { fee: 0, address: '0x3041CbD36888bECc7bbCBc0045E3B1f144466f5f' },
       UniswapV3_500: { fee: 500, address: '0x7858E59e0C01EA06Df3aF3D20aC7B0003275D4Bf' },
       UniswapV3_3000: { fee: 3000, address: '0xEe4Cf3b78A74aFfa38C6a926282bCd8B5952818d' },
-      UniswapV3_10000: { fee: 10000, address: '0xbb256c2F1B677e27118b0345FD2b3894D2E6D487' },
     }
   },
 
@@ -1217,11 +1143,8 @@ export const DIRECT_SWAP_PAIRS = [
     token1: getTokenInfo(TOKENS.USDC.address),
     pools: {
       UniswapV2: { fee: 0, address: '0x004375Dff511095CC5A197A54140a24eFEF3A416' },
-      UniswapV3_500: { fee: 500, address: '0x9a772018FbD77fcD2d25657e5C547BAfF3Fd7D16' },
       UniswapV3_3000: { fee: 3000, address: '0x99ac8cA7087fA4A2A1FB6357269965A2014ABc35' },
       UniswapV3_10000: { fee: 10000, address: '0xCBFB0745b8489973Bf7b334d54fdBd573Df7eF3c' },
-      PancakeswapV3_500: { fee: 500, address: '0xA9390ed03Bf74A37655CdA94AD8634416677f8Cd' },
-      PancakeswapV3_10000: { fee: 10000, address: '0xB93512252C91cA9C95C06ABd083B0932be028fb9' },
     }
   },
 
@@ -1240,7 +1163,6 @@ export const DIRECT_SWAP_PAIRS = [
       SushiswapV3_3000: { fee: 3000, address: '0x763d3b7296e7C9718AD5B058aC2692A19E5b3638' },
       UniswapV3_10000: { fee: 10000, address: '0x7BeA39867e4169DBe237d55C8242a8f2fcDcc387' },
       SushiswapV3_10000: { fee: 10000, address: '0x1D437AC0a77d9d0Ab6A512A6b054930Aa582A5B7' },
-      PancakeswapV3_10000: { fee: 10000, address: '0xBAa22bc3b7D9Ed30a3B1DDbC6446AC397a4c80a4' },
     }
   },
 
@@ -1250,7 +1172,6 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.YFI.address),
     token1: getTokenInfo(TOKENS.USDC.address),
     pools: {
-      UniswapV3_3000: { fee: 3000, address: '0xa090FB79f31A6E6AaD75E31EA396022253355Fc2' },
       UniswapV3_10000: { fee: 10000, address: '0xbfAcdf75F59988f18700d46f85095CDA600E2192' },
     }
   },
@@ -1261,9 +1182,7 @@ export const DIRECT_SWAP_PAIRS = [
     token0: getTokenInfo(TOKENS.WBTC.address),
     token1: getTokenInfo(TOKENS.USDT.address),
     pools: {
-      UniswapV3_500: { fee: 500, address: '0x56534741CD8B152df6d48AdF7ac51f75169A83b2' },
       UniswapV3_3000: { fee: 3000, address: '0x9Db9e0e53058C89e5B94e29621a205198648425B' },
-      UniswapV3_10000: { fee: 10000, address: '0x5a59E4e647A3Acc42b01715F3A1D271c1f7e7aeb' },
     }
   },
 
@@ -1292,12 +1211,6 @@ export const DIRECT_SWAP_PAIRS = [
     pools: {
       UniswapV2: { fee: 0, address: '0xBb2b8038a1640196FbE3e38816F3e67Cba72D940' },
       SushiswapV2: { fee: 0, address: '0xCEfF51756c56CeFFCA006cD410B03FFC46dd3a58' },
-      UniswapV3_500: { fee: 500, address: '0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0' },
-      SushiswapV3_500: { fee: 500, address: '0x801CCFae9d2C77893B545E8D0E4637C055CD26cB' },
-      PancakeswapV3_500: { fee: 500, address: '0x8E0a80f54ed8872fe0609C637D3D4970b86a038a' },
-      UniswapV3_3000: { fee: 3000, address: '0xCBCdF9626bC03E24f779434178A73a0B4bad62eD' },
-      SushiswapV3_3000: { fee: 3000, address: '0x7486FF76F69872D27b22dadA4078Bd55b36A5324' },
-      UniswapV3_10000: { fee: 10000, address: '0x6Ab3bba2F41e7eAA262fa5A1A9b3932fA161526F' },
     }
   },
 
@@ -1309,8 +1222,6 @@ export const DIRECT_SWAP_PAIRS = [
     pools: {
       UniswapV2: { fee: 0, address: '0x2fDbAdf3C4D5A8666Bc06645B8358ab803996E28' },
       SushiswapV2: { fee: 0, address: '0x088ee5007C98a9677165D78dD2109AE4a3D04d0C' },
-      UniswapV3_3000: { fee: 3000, address: '0x04916039B1f59D9745Bf6E0a21f191D1e0A84287' },
-      UniswapV3_10000: { fee: 10000, address: '0x2E8dAf55F212BE91D3fA882ccEAb193A08fddeB2' },
     }
   },
 
@@ -1322,9 +1233,82 @@ export const DIRECT_SWAP_PAIRS = [
     pools: {
       UniswapV2: { fee: 0, address: '0xc6F348dd3B91a56D117ec0071C1e9b83C0996De4' },
       UniswapV3_3000: { fee: 3000, address: '0x14424eEeCbfF345B38187d0B8b749E56FAA68539' },
-      UniswapV3_10000: { fee: 10000, address: '0xf50d8E1c582eD5A6A2981337CaA0bE789A63aD50' },
     }
-  }
+  },
+
+  { name: 'RSR/USDC', token0: getTokenInfo(TOKENS.RSR.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0x167a3874664561B1c4F8F99C40CFB268Df1a5A21' }}},
+  { name: 'RSR/WETH', token0: getTokenInfo(TOKENS.RSR.address), token1: getTokenInfo(TOKENS.WETH.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0x32D9259e6792B2150FD50395D971864647FA27B2' }}},
+
+  // PEPE – insane volume
+  { name: 'PEPE/USDC', token0: getTokenInfo(TOKENS.PEPE.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0xcEE31C846CbF003F4cEB5Bbd234cBA03C6e940C7' }}},
+  { name: 'PEPE/USDT', token0: getTokenInfo(TOKENS.PEPE.address), token1: getTokenInfo(TOKENS.USDT.address),
+    pools: { UniswapV3_500: { fee: 500, address: '0x9B96128A3F770FAF7a882Af4b0156E6976feD3d0' }}},
+
+  // LDO (Lido) – top 15 token
+  { name: 'LDO/USDC', token0: getTokenInfo(TOKENS.LDO.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0x78235D08B2aE7a3E00184329212a4d7AcD2F9985' }}},
+
+  // 1INCH
+  { name: '1INCH/USDC', token0: getTokenInfo(TOKENS['1INCH'].address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_500: { fee: 500, address: '0x62773f00cd3e0df3D70bECA5Aee342B0151fE78a' }}},
+
+  // SHIB direct stable pairs
+  { name: 'SHIB/USDC', token0: getTokenInfo(TOKENS.SHIB.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0xA15cc73E881c06D8DB06b50b7a3688B763C18350' }}},
+
+  // LINK direct stables
+  { name: 'LINK/USDC', token0: getTokenInfo(TOKENS.LINK.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0xFAD57d2039C21811C8F2B5D5B65308aa99D31559' }}},
+
+  // UNI direct stables
+  { name: 'UNI/USDC', token0: getTokenInfo(TOKENS.UNI.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0xD0fC8bA7E267f2bc56044A7715A489d851dC6D78' }}},
+
+  // AAVE stables
+  { name: 'AAVE/USDC', token0: getTokenInfo(TOKENS.AAVE.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0xdceaf5d0E5E0dB9596A47C0c4120654e80B1d706' }}},
+
+  // CRV stables
+  { name: 'CRV/USDC', token0: getTokenInfo(TOKENS.CRV.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0x9445bd19767F73DCaE6f2De90e6cd31192F62589' }}},
+
+  // SAND stables
+  { name: 'SAND/USDC', token0: getTokenInfo(TOKENS.SAND.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0x5864DEa5f1750D1f8887F9FB7f3a50F15789514E' }}},
+
+  // MANA stables
+  { name: 'MANA/USDC', token0: getTokenInfo(TOKENS.MANA.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0x7BeA39867e4169DBe237d55C8242a8f2fcDcc387' }}},
+
+  // APE stables
+  { name: 'APE/USDC', token0: getTokenInfo(TOKENS.APE.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0xB07Fe2F407F971125D4EB1977f8aCEe8846C7324' }}},
+
+  // GRT stables
+  { name: 'GRT/USDC', token0: getTokenInfo(TOKENS.GRT.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0xB06E7Ed37CFA8F0f2888355DD1913e45412798c5' }}},
+
+  // MATIC stables
+  { name: 'MATIC/USDC', token0: getTokenInfo(TOKENS.MATIC.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_3000: { fee: 3000, address: '0x07A6E955bA4345BAe83Ac2A6fAa771fddd8A2011' }}},
+  
+
+  // Extra cross pairs that create triangles
+  { name: 'LDO/DAI', token0: getTokenInfo(TOKENS.LDO.address), token1: getTokenInfo(TOKENS.DAI.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0xbBa38B5Bdd5A04AB5A9F52db87e64efc299B6bD5' }}},
+  { name: 'FXS/USDC', token0: getTokenInfo(TOKENS.FXS.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_10000: { fee: 10000, address: '0xCD8286b48936cDAC20518247dBD310ab681A9fBf' }}},
+
+  // Final killer triangles
+  { name: 'WETH/USDC', token0: getTokenInfo(TOKENS.WETH.address), token1: getTokenInfo(TOKENS.USDC.address),
+    pools: { UniswapV3_500: { fee: 500, address: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640' }}},
+  { name: 'WETH/USDT', token0: getTokenInfo(TOKENS.WETH.address), token1: getTokenInfo(TOKENS.USDT.address),
+    pools: { UniswapV3_500: { fee: 500, address: '0x11b815efB8f581194ae79006d24E0d814B7697F6' }}},
+  { name: 'USDC/USDT', token0: getTokenInfo(TOKENS.USDC.address), token1: getTokenInfo(TOKENS.USDT.address),
+    pools: { UniswapV3_500: { fee: 500, address: '0x7858E59e0C01EA06Df3aF3D20aC7B0003275D4Bf' }}},
 ];
 
 

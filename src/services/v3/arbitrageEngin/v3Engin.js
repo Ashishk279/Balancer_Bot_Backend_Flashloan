@@ -68,7 +68,8 @@ const MAX_DEPTH = 3;
 const MAX_BRANCHING = 8; // Increased for better coverage
 const TOP_TOKENS_LIMIT = 20; // Increased
 
-const INPUT_AMOUNT_USD = "1000"
+const INPUT_AMOUNT_USD = "1000";
+const MAX_CYCLES_TO_CHECK = 500;
 
 // Minimum trade amounts for profitability
 
@@ -2440,8 +2441,9 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
     console.log(`   📊 Quote Flow: ${testAmountHuman} ${tokenB.symbol} → ${buyOutputHuman} ${tokenA.symbol} → ${sellOutputHuman} ${tokenB.symbol}`);
 
     // Calculate spread percentage
-    const ratio = Number(sellOutput) / Number(testAmount);
+    const ratio = new Decimal(sellOutput.toString()).div(new Decimal(testAmount.toString())).toNumber();
     const spreadPercent = (ratio - 1) * 100;
+    // console.log(`   📈 Calculated Spread: ${spreadPercent}`);
 
     // ✅ ENHANCED VALIDATION: More detailed error detection
     if (spreadPercent < -50) {
@@ -2471,6 +2473,7 @@ async function checkSpreadExists(buyPriceObj, sellPriceObj, tokenA, tokenB) {
 
     // Minimum spread = total fees + gas + 0.1% safety margin
     const MIN_SPREAD_PERCENT = totalFeePercent + gasOverheadPercent + 0.1;
+    // console.log("Mingang---------------", MIN_SPREAD_PERCENT)
 
     // Log the dynamic threshold for transparency
     console.log(`   💰 Min profitable spread: ${MIN_SPREAD_PERCENT.toFixed(2)}% (fees: ${totalFeePercent.toFixed(2)}% + gas: ${gasOverheadPercent}% + margin: 0.1%)`);
@@ -3441,282 +3444,432 @@ function calculateOptimalArbitrageAmount(buyPrice, sellPrice, buyLiquidity, sell
 //   return opportunities;
 // }
 // OPTIMIZED TRIANGULAR ARBITRAGE - Using efficient graph algorithms
-async function triangularArbitrageOptimized(allPrices) {
-  const timer = new PerformanceTimer();
-  logToMain('🔍 Starting optimized triangular arbitrage analysis');
+// async function triangularArbitrageOptimized(allPrices) {
+//   const timer = new PerformanceTimer();
+//   logToMain('🔍 Starting optimized triangular arbitrage analysis');
 
-  console.log(`Starting with ${allPrices.length} price data points`);
+//   console.log(`Starting with ${allPrices.length} price data points`);
 
-  const { graph, edgeDetails } = buildOptimizedGraph(allPrices);
-  timer.checkpoint('Graph built');
+//   const { graph, edgeDetails } = buildOptimizedGraph(allPrices);
+//   timer.checkpoint('Graph built');
 
-  const topTokens = identifyTopTokens(allPrices);
-  console.log(`Top tokens: ${topTokens.slice(0, 10).join(', ')}`);
-  timer.checkpoint('Top tokens identified');
+//   const topTokens = identifyTopTokens(allPrices);
+//   console.log(`Top tokens: ${topTokens.slice(0, 10).join(', ')}`);
+//   timer.checkpoint('Top tokens identified');
 
-  const maxCycles = 100;
-  const cycles = [];
+//   const maxCycles = 100;
+//   const cycles = [];
 
-  for (const token of topTokens.slice(0, 10)) { // Limit starting tokens for debugging
-    if (!graph.has(token)) {
-      console.log(`Token ${token} not found in graph`);
-      continue;
-    }
+//   for (const token of topTokens.slice(0, 10)) { // Limit starting tokens for debugging
+//     if (!graph.has(token)) {
+//       console.log(`Token ${token} not found in graph`);
+//       continue;
+//     }
 
-    console.log(`Searching cycles starting from ${token}`);
-    const visited = new Set();
-    visited.add(token);
+//     console.log(`Searching cycles starting from ${token}`);
+//     const visited = new Set();
+//     visited.add(token);
 
-    findCyclesDFS(
-      token,
-      graph,
-      0,
-      [token],
-      new Decimal(1),
-      visited,
-      cycles,
-      maxCycles,
-      edgeDetails,
-      []
-    );
+//     findCyclesDFS(
+//       token,
+//       graph,
+//       0,
+//       [token],
+//       new Decimal(1),
+//       visited,
+//       cycles,
+//       maxCycles,
+//       edgeDetails,
+//       []
+//     );
 
-    console.log(`Found ${cycles.length} cycles so far`);
-    if (cycles.length >= maxCycles) break;
-  }
+//     console.log(`Found ${cycles.length} cycles so far`);
+//     if (cycles.length >= maxCycles) break;
+//   }
 
-  timer.checkpoint('Cycles found');
-  console.log(`Total cycles found: ${cycles.length}`);
+//   timer.checkpoint('Cycles found');
+//   console.log(`Total cycles found: ${cycles.length}`);
 
-  const opportunities = [];
-  for (const cycle of cycles) {
-    const opportunity = await processCycle(cycle, allPrices);
-    if (opportunity) {
-      opportunities.push(opportunity);
-    }
-  }
+//   const opportunities = [];
+//   for (const cycle of cycles) {
+//     const opportunity = await processCycle(cycle, allPrices);
+//     if (opportunity) {
+//       opportunities.push(opportunity);
+//     }
+//   }
 
-  timer.checkpoint('Cycles processed');
-  logToMain(`✅ Found ${opportunities.length} triangular arbitrage opportunities`);
+//   timer.checkpoint('Cycles processed');
+//   logToMain(`✅ Found ${opportunities.length} triangular arbitrage opportunities`);
 
-  return opportunities;
-}
-// Build optimized graph with pre-filtering
-function buildOptimizedGraph(allPrices) {
-  const graph = new Map();
-  const tokenLiquidity = new Map();
-  const edgeDetails = new Map(); // Store complete edge information
+//   return opportunities;
+// }
+// // Build optimized graph with pre-filtering
+// function buildOptimizedGraph(allPrices) {
+//   const graph = new Map();
+//   const tokenLiquidity = new Map();
+//   const edgeDetails = new Map(); // Store complete edge information
 
-  // Pre-calculate token liquidity
-  for (const price of allPrices) {
-    const liquidity = new Decimal(price.liquidity || 0);
+//   // Pre-calculate token liquidity
+//   for (const price of allPrices) {
+//     const liquidity = new Decimal(price.liquidity || 0);
 
-    tokenLiquidity.set(price.tokenA.symbol,
-      (tokenLiquidity.get(price.tokenA.symbol) || new Decimal(0)).add(liquidity));
-    tokenLiquidity.set(price.tokenB.symbol,
-      (tokenLiquidity.get(price.tokenB.symbol) || new Decimal(0)).add(liquidity));
-  }
+//     tokenLiquidity.set(price.tokenA.symbol,
+//       (tokenLiquidity.get(price.tokenA.symbol) || new Decimal(0)).add(liquidity));
+//     tokenLiquidity.set(price.tokenB.symbol,
+//       (tokenLiquidity.get(price.tokenB.symbol) || new Decimal(0)).add(liquidity));
+//   }
 
-  // Filter tokens by liquidity
-  const liquidTokens = new Set();
-  for (const [token, liquidity] of tokenLiquidity) {
-    if (liquidity.gte(MIN_LIQUIDITY)) {
-      liquidTokens.add(token);
-    }
-  }
+//   // Filter tokens by liquidity
+//   const liquidTokens = new Set();
+//   for (const [token, liquidity] of tokenLiquidity) {
+//     if (liquidity.gte(MIN_LIQUIDITY)) {
+//       liquidTokens.add(token);
+//     }
+//   }
 
-  console.log(`Building graph with ${liquidTokens.size} liquid tokens`);
+//   console.log(`Building graph with ${liquidTokens.size} liquid tokens`);
 
-  // Build bidirectional graph with proper exchange rates
-  for (const price of allPrices) {
-    if (!liquidTokens.has(price.tokenA.symbol) || !liquidTokens.has(price.tokenB.symbol)) {
-      continue;
-    }
+//   // Build bidirectional graph with proper exchange rates
+//   for (const price of allPrices) {
+//     if (!liquidTokens.has(price.tokenA.symbol) || !liquidTokens.has(price.tokenB.symbol)) {
+//       continue;
+//     }
 
-    // Initialize graph nodes
-    if (!graph.has(price.tokenA.symbol)) {
-      graph.set(price.tokenA.symbol, []);
-    }
-    if (!graph.has(price.tokenB.symbol)) {
-      graph.set(price.tokenB.symbol, []);
-    }
+//     // Initialize graph nodes
+//     if (!graph.has(price.tokenA.symbol)) {
+//       graph.set(price.tokenA.symbol, []);
+//     }
+//     if (!graph.has(price.tokenB.symbol)) {
+//       graph.set(price.tokenB.symbol, []);
+//     }
 
-    const priceOfAinB = new Decimal(price.priceOfAinB);
-    const priceOfBinA = new Decimal(price.priceOfBinA);
+//     const priceOfAinB = new Decimal(price.priceOfAinB);
+//     const priceOfBinA = new Decimal(price.priceOfBinA);
 
-    if (!priceOfAinB.isFinite() || !priceOfBinA.isFinite() ||
-      priceOfAinB.lte(0) || priceOfBinA.lte(0)) {
-      continue;
-    }
+//     if (!priceOfAinB.isFinite() || !priceOfBinA.isFinite() ||
+//       priceOfAinB.lte(0) || priceOfBinA.lte(0)) {
+//       continue;
+//     }
 
-    // Calculate exchange rates (how much you get for 1 unit)
-    // If priceOfAinB = 2000 (1 ETH = 2000 USDC), then exchangeRate = 2000 USDC per ETH
-    const exchangeRateAtoB = priceOfAinB; // A -> B: how much B you get for 1 A
-    const exchangeRateBtoA = priceOfBinA; // B -> A: how much A you get for 1 B
+//     // Calculate exchange rates (how much you get for 1 unit)
+//     // If priceOfAinB = 2000 (1 ETH = 2000 USDC), then exchangeRate = 2000 USDC per ETH
+//     const exchangeRateAtoB = priceOfAinB; // A -> B: how much B you get for 1 A
+//     const exchangeRateBtoA = priceOfBinA; // B -> A: how much A you get for 1 B
 
-    // A -> B edge
-    const edgeKeyAB = `${price.tokenA.symbol}->${price.tokenB.symbol}-${price.dex}`;
-    const edgeAB = {
-      token: price.tokenB.symbol,
-      dex: price.dex,
-      rate: exchangeRateAtoB.toNumber(),
-      poolAddress: price.poolAddress,
-      fee: new Decimal(price.fee).toNumber(),
-      liquidity: new Decimal(price.liquidity || 0).toNumber(),
-      fromToken: price.tokenA.symbol,
-      toToken: price.tokenB.symbol
-    };
+//     // A -> B edge
+//     const edgeKeyAB = `${price.tokenA.symbol}->${price.tokenB.symbol}-${price.dex}`;
+//     const edgeAB = {
+//       token: price.tokenB.symbol,
+//       dex: price.dex,
+//       rate: exchangeRateAtoB.toNumber(),
+//       poolAddress: price.poolAddress,
+//       fee: new Decimal(price.fee).toNumber(),
+//       liquidity: new Decimal(price.liquidity || 0).toNumber(),
+//       fromToken: price.tokenA.symbol,
+//       toToken: price.tokenB.symbol
+//     };
 
-    graph.get(price.tokenA.symbol).push(edgeAB);
-    edgeDetails.set(edgeKeyAB, {
-      ...price,
-      exchangeRate: exchangeRateAtoB,
-      direction: 'AtoB'
-    });
+//     graph.get(price.tokenA.symbol).push(edgeAB);
+//     edgeDetails.set(edgeKeyAB, {
+//       ...price,
+//       exchangeRate: exchangeRateAtoB,
+//       direction: 'AtoB'
+//     });
 
-    // B -> A edge
-    const edgeKeyBA = `${price.tokenB.symbol}->${price.tokenA.symbol}-${price.dex}`;
-    const edgeBA = {
-      token: price.tokenA.symbol,
-      dex: price.dex,
-      rate: exchangeRateBtoA.toNumber(),
-      poolAddress: price.poolAddress,
-      fee: new Decimal(price.fee).toNumber(),
-      liquidity: new Decimal(price.liquidity || 0).toNumber(),
-      fromToken: price.tokenB.symbol,
-      toToken: price.tokenA.symbol
-    };
+//     // B -> A edge
+//     const edgeKeyBA = `${price.tokenB.symbol}->${price.tokenA.symbol}-${price.dex}`;
+//     const edgeBA = {
+//       token: price.tokenA.symbol,
+//       dex: price.dex,
+//       rate: exchangeRateBtoA.toNumber(),
+//       poolAddress: price.poolAddress,
+//       fee: new Decimal(price.fee).toNumber(),
+//       liquidity: new Decimal(price.liquidity || 0).toNumber(),
+//       fromToken: price.tokenB.symbol,
+//       toToken: price.tokenA.symbol
+//     };
 
-    graph.get(price.tokenB.symbol).push(edgeBA);
-    edgeDetails.set(edgeKeyBA, {
-      ...price,
-      exchangeRate: exchangeRateBtoA,
-      direction: 'BtoA'
-    });
-  }
+//     graph.get(price.tokenB.symbol).push(edgeBA);
+//     edgeDetails.set(edgeKeyBA, {
+//       ...price,
+//       exchangeRate: exchangeRateBtoA,
+//       direction: 'BtoA'
+//     });
+//   }
 
-  // Sort edges by liquidity and limit branching
-  for (const [token, edges] of graph) {
-    edges.sort((a, b) => b.liquidity - a.liquidity);
-    if (edges.length > MAX_BRANCHING) {
-      graph.set(token, edges.slice(0, MAX_BRANCHING));
-    }
-  }
+//   // Sort edges by liquidity and limit branching
+//   for (const [token, edges] of graph) {
+//     edges.sort((a, b) => b.liquidity - a.liquidity);
+//     if (edges.length > MAX_BRANCHING) {
+//       graph.set(token, edges.slice(0, MAX_BRANCHING));
+//     }
+//   }
 
-  console.log(`Graph built with ${graph.size} nodes`);
-  for (const [token, edges] of graph) {
-    console.log(`${token}: ${edges.length} edges`);
-  }
+//   console.log(`Graph built with ${graph.size} nodes`);
+//   for (const [token, edges] of graph) {
+//     console.log(`${token}: ${edges.length} edges`);
+//   }
 
-  return { graph, edgeDetails };
-}
+//   return { graph, edgeDetails };
+// }
 
-// Get top liquid tokens efficiently
-function getTopLiquidTokens(allPrices) {
-  const tokenLiquidity = new Map();
+// // Get top liquid tokens efficiently
+// function getTopLiquidTokens(allPrices) {
+//   const tokenLiquidity = new Map();
 
-  for (const price of allPrices) {
-    const liquidity = new Decimal(price.liquidity || 0);
+//   for (const price of allPrices) {
+//     const liquidity = new Decimal(price.liquidity || 0);
 
-    tokenLiquidity.set(price.tokenA.symbol,
-      (tokenLiquidity.get(price.tokenA.symbol) || new Decimal(0)).add(liquidity));
-    tokenLiquidity.set(price.tokenB.symbol,
-      (tokenLiquidity.get(price.tokenB.symbol) || new Decimal(0)).add(liquidity));
-  }
+//     tokenLiquidity.set(price.tokenA.symbol,
+//       (tokenLiquidity.get(price.tokenA.symbol) || new Decimal(0)).add(liquidity));
+//     tokenLiquidity.set(price.tokenB.symbol,
+//       (tokenLiquidity.get(price.tokenB.symbol) || new Decimal(0)).add(liquidity));
+//   }
 
-  return Array.from(tokenLiquidity.entries())
-    .sort((a, b) => b[1].minus(a[1]).toNumber())
-    .map(([token]) => token);
-}
+//   return Array.from(tokenLiquidity.entries())
+//     .sort((a, b) => b[1].minus(a[1]).toNumber())
+//     .map(([token]) => token);
+// }
 
-// Optimized cycle detection using DFS with pruning
-async function findCyclesOptimized(graph, tokens) {
-  const cycles = [];
-  const maxCyclesPerToken = 5; // Limit cycles per token
+// // Optimized cycle detection using DFS with pruning
+// async function findCyclesOptimized(graph, tokens) {
+//   const cycles = [];
+//   const maxCyclesPerToken = 5; // Limit cycles per token
 
-  for (const startToken of tokens) {
-    if (!graph.has(startToken)) continue;
+//   for (const startToken of tokens) {
+//     if (!graph.has(startToken)) continue;
 
-    const tokenCycles = [];
-    findCyclesDFS(startToken, graph, 0, [startToken], new Decimal(1),
-      new Set([startToken]), tokenCycles, maxCyclesPerToken);
+//     const tokenCycles = [];
+//     findCyclesDFS(startToken, graph, 0, [startToken], new Decimal(1),
+//       new Set([startToken]), tokenCycles, maxCyclesPerToken);
 
-    cycles.push(...tokenCycles);
+//     cycles.push(...tokenCycles);
 
-    if (cycles.length > MAX_TRIANGULAR_COMBINATIONS) break;
-  }
+//     if (cycles.length > MAX_TRIANGULAR_COMBINATIONS) break;
+//   }
 
-  return cycles.slice(0, MAX_TRIANGULAR_COMBINATIONS);
-}
+//   return cycles.slice(0, MAX_TRIANGULAR_COMBINATIONS);
+// }
 
-// Optimized DFS with aggressive pruning
-function findCyclesDFS(currentToken, graph, depth, path, currentRate, visited, cycles, maxCycles, edgeDetails, edges = []) {
-  if (depth >= MAX_DEPTH || cycles.length >= maxCycles) return;
+// // Optimized DFS with aggressive pruning
+// function findCyclesDFS(currentToken, graph, depth, path, currentRate, visited, cycles, maxCycles, edgeDetails, edges = []) {
+//   if (depth >= MAX_DEPTH || cycles.length >= maxCycles) return;
 
-  // More reasonable threshold for finding cycles - look for any positive return
-  if (currentRate.lte(0.9)) return; // Only eliminate clearly unprofitable paths
+//   // More reasonable threshold for finding cycles - look for any positive return
+//   if (currentRate.lte(0.9)) return; // Only eliminate clearly unprofitable paths
 
-  const nodeEdges = graph.get(currentToken) || [];
+//   const nodeEdges = graph.get(currentToken) || [];
 
-  for (const edge of nodeEdges) {
-    const nextToken = edge.token;
-    const rate = new Decimal(edge.rate);
+//   for (const edge of nodeEdges) {
+//     const nextToken = edge.token;
+//     const rate = new Decimal(edge.rate);
 
-    if (!rate.isFinite() || rate.lte(0)) {
-      continue;
-    }
+//     if (!rate.isFinite() || rate.lte(0)) {
+//       continue;
+//     }
 
-    // Account for fees in rate calculation
-    const feeMultiplier = new Decimal(1).minus(edge.fee).minus(PRIORITY_FEE);
-    const effectiveRate = rate.mul(feeMultiplier);
-    const newRate = currentRate.mul(effectiveRate);
+//     // Account for fees in rate calculation
+//     const feeMultiplier = new Decimal(1).minus(edge.fee).minus(PRIORITY_FEE);
+//     const effectiveRate = rate.mul(feeMultiplier);
+//     const newRate = currentRate.mul(effectiveRate);
 
-    // Check if we've completed a cycle
-    if (nextToken === path[0] && depth >= 2 && newRate.gt(1.001)) { // 0.1% minimum profit
-      const cycle = {
-        path: [...path, nextToken],
-        rate: newRate.toNumber(),
-        dexes: [...edges.map(e => e.dex), edge.dex],
-        poolAddresses: [...edges.map(e => e.poolAddress), edge.poolAddress],
-        fees: [...edges.map(e => new Decimal(e.fee)), new Decimal(edge.fee)],
-        edges: [...edges, edge]
-      };
+//     // Check if we've completed a cycle
+//     if (nextToken === path[0] && depth >= 2 && newRate.gt(1.001)) { // 0.1% minimum profit
+//       const cycle = {
+//         path: [...path, nextToken],
+//         rate: newRate.toNumber(),
+//         dexes: [...edges.map(e => e.dex), edge.dex],
+//         poolAddresses: [...edges.map(e => e.poolAddress), edge.poolAddress],
+//         fees: [...edges.map(e => new Decimal(e.fee)), new Decimal(edge.fee)],
+//         edges: [...edges, edge]
+//       };
 
-      cycles.push(cycle);
-      console.log(`Found cycle: ${cycle.path.join(' -> ')} with effective rate ${newRate.toFixed(6)}`);
+//       cycles.push(cycle);
+//       console.log(`Found cycle: ${cycle.path.join(' -> ')} with effective rate ${newRate.toFixed(6)}`);
 
-      if (cycles.length >= maxCycles) return;
-    }
-    // Continue building path if not visited and within depth limit
-    else if (depth < MAX_DEPTH - 1 && !visited.has(nextToken)) {
-      visited.add(nextToken);
-      findCyclesDFS(
-        nextToken,
-        graph,
-        depth + 1,
-        [...path, nextToken],
-        newRate,
-        visited,
-        cycles,
-        maxCycles,
-        edgeDetails,
-        [...edges, edge]
-      );
-      visited.delete(nextToken);
-    }
-  }
-}
+//       if (cycles.length >= maxCycles) return;
+//     }
+//     // Continue building path if not visited and within depth limit
+//     else if (depth < MAX_DEPTH - 1 && !visited.has(nextToken)) {
+//       visited.add(nextToken);
+//       findCyclesDFS(
+//         nextToken,
+//         graph,
+//         depth + 1,
+//         [...path, nextToken],
+//         newRate,
+//         visited,
+//         cycles,
+//         maxCycles,
+//         edgeDetails,
+//         [...edges, edge]
+//       );
+//       visited.delete(nextToken);
+//     }
+//   }
+// }
 
-// Process individual cycle
+// // Process individual cycle
+// // async function processCycle(cycle, allPrices) {
+// //   try {
+// //     const startToken = cycle.path[0];
+// //     const startDecimals = getTokenDecimals(startToken);
+
+// //     const inputAmountHuman = '5';
+// //     const inputAmount = new Decimal(ethers.parseUnits(inputAmountHuman, startDecimals).toString());
+// //     let amount = inputAmount;
+// //     const amounts = [amount];
+// //     const amountsFormatted = [ethers.formatUnits(amount.toFixed(0), startDecimals)];
+// //     const stepFees = [];
+// //     const stepFeesFormatted = [];
+// //     const direction = [];
+// //     let totalFee = new Decimal(0);
+
+// //     for (let i = 0; i < cycle.path.length - 1; i++) {
+// //       const fromToken = cycle.path[i];
+// //       const toToken = cycle.path[i + 1];
+// //       const dex = cycle.dexes[i];
+// //       const poolAddress = cycle.poolAddresses[i];
+// //       const platformFee = new Decimal(cycle.fees[i]);
+// //       const toDecimals = getTokenDecimals(toToken);
+
+// //       const priceData = allPrices.find(p =>
+// //         p.poolAddress.toLowerCase() === poolAddress.toLowerCase() &&
+// //         p.tokenA.symbol === fromToken && p.tokenB.symbol === toToken
+// //       );
+
+// //       if (!priceData) {
+// //         logToMain(`Skipping cycle step ${fromToken} -> ${toToken} on ${dex}: No price data`, 'warn');
+// //         return null;
+// //       }
+
+// //       const rate = new Decimal(priceData.priceOfAinB);
+// //       if (!rate.isFinite() || rate.lte(0)) {
+// //         logToMain(`Skipping cycle step ${fromToken} -> ${toToken} on ${dex}: Invalid rate (${rate})`, 'warn');
+// //         return null;
+// //       }
+
+// //       const amountBeforeFee = amount.mul(rate);
+// //       const stepPlatformFee = amountBeforeFee.mul(platformFee);
+// //       const stepPriorityFee = amountBeforeFee.mul(PRIORITY_FEE);
+// //       const stepTotalFee = stepPlatformFee.add(stepPriorityFee);
+// //       amount = amountBeforeFee.minus(stepTotalFee);
+// //       amounts.push(amount);
+// //       amountsFormatted.push(ethers.formatUnits(amount.toFixed(0), toDecimals));
+// //       stepFees.push(stepTotalFee);
+// //       stepFeesFormatted.push(ethers.formatUnits(stepTotalFee.toFixed(0), toDecimals));
+// //       totalFee = totalFee.add(stepTotalFee);
+// //       direction.push(`Step ${i + 1}: ${fromToken} -> ${toToken} on ${dex}`);
+// //     }
+
+// //     // Calculate costs
+// //     const gasCostETH = await calculateGasCost(wsProvider, 350000);
+// //     const gasCostWei = ethers.parseEther(gasCostETH.toString());
+
+// //     // Flash loan fee on the initial borrowed amount
+// //     const flashLoanFee = inputAmount.mul(MAX_FLASH_LOAN_FEE);
+
+// //     // Convert gas cost to start token terms
+// //     let gasCost;
+// //     if (startToken === 'ETH' || startToken === 'WETH') {
+// //       gasCost = new Decimal(gasCostWei.toString());
+// //     } else {
+// //       const ethPriceInUSD = new Decimal('2600');
+// //       const tokenPriceInUSD = deriveTokenPriceInUSD(startToken, allPrices);
+// //       gasCost = new Decimal(gasCostWei.toString())
+// //         .mul(ethPriceInUSD)
+// //         .div(tokenPriceInUSD)
+// //         .div(new Decimal(10).pow(18 - startDecimals));
+// //     }
+
+// //     const grossProfit = amounts[amounts.length - 1].minus(inputAmount);
+// //     const totalCosts = gasCost.add(flashLoanFee);
+// //     const netProfit = grossProfit.minus(totalCosts);
+
+// //     const totalFeeFormatted = ethers.formatUnits(totalFee.toFixed(0), startDecimals);
+// //     const gasCostFormatted = ethers.formatUnits(gasCost.toFixed(0), startDecimals);
+// //     const flashLoanFeeFormatted = ethers.formatUnits(flashLoanFee.toFixed(0), startDecimals);
+// //     const grossProfitFormatted = ethers.formatUnits(grossProfit.toFixed(0), startDecimals);
+// //     const netProfitFormatted = ethers.formatUnits(netProfit.toFixed(0), startDecimals);
+
+// //     const opportunity = {
+// //       type: 'v3_triangular',
+// //       cycle: cycle.path.join(' -> '),
+// //       pair: cycle.path.join('/'),
+// //       direction,
+// //       path: cycle.path,
+// //       dexes: cycle.dexes,
+// //       fees: stepFees.map(f => f),
+// //       feesFormatted: stepFeesFormatted,
+// //       totalFees: totalFee,
+// //       totalFeesFormatted: totalFeeFormatted,
+// //       gasEstimation: gasCost,
+// //       gasEstimationFormatted: gasCostFormatted,
+// //       flashLoanFee: flashLoanFee, // Add flash loan fee
+// //       flashLoanFeeFormatted: flashLoanFeeFormatted,
+// //       profit: netProfit,
+// //       grossProfit,
+// //       grossProfitFormatted,
+// //       netProfitFormatted,
+// //       isProfitable: netProfit.gt(0),
+// //       amounts: amounts.map(a => a),
+// //       amountsFormatted,
+// //       estimatedRate: amounts[amounts.length - 1].div(inputAmount),
+// //       amount_in: inputAmount.toString(),
+// //       amount_out: amounts[amounts.length - 1].toFixed(0),
+// //       buyDex: cycle.dexes[0],
+// //       sellDex: cycle.dexes[cycle.dexes.length - 1],
+// //       buyPrice: amounts[1].div(inputAmount),
+// //       sellPrice: amounts[amounts.length - 1].div(amounts[amounts.length - 2]),
+// //       inputFormatted: amountsFormatted[0],
+// //       outputFormatted: amountsFormatted[amountsFormatted.length - 1],
+// //       amountAFormatted: amountsFormatted[1] || amountsFormatted[0]
+// //     };
+
+// //     console.log(
+// //       `\n🔺 Triangular Arbitrage Opportunity`,
+// //       `\n  Cycle: ${cycle.path.join(' -> ')}`,
+// //       `\n  Start: ${amountsFormatted[0]} ${startToken} (${inputAmount} wei)`,
+// //       ...direction.map((dir, i) =>
+// //         `\n  ${dir}` +
+// //         `\n    Amount In: ${amountsFormatted[i]} ${cycle.path[i]}` +
+// //         `\n    Platform Fee: ${cycle.fees[i].mul(100)}% | Priority Fee: ${PRIORITY_FEE.mul(100)}%` +
+// //         `\n    Fees: ${stepFeesFormatted[i]} ${cycle.path[i + 1]}` +
+// //         `\n    Amount Out: ${amountsFormatted[i + 1]} ${cycle.path[i + 1]}`
+// //       ),
+// //       `\n  Final Output: ${amountsFormatted[amounts.length - 1]} ${startToken}`,
+// //       `\n  Gross Profit: ${grossProfitFormatted} ${startToken}`,
+// //       `\n  Total DEX Fees: ${totalFeeFormatted} ${startToken}`,
+// //       `\n  Gas Cost: ${gasCostFormatted} ${startToken}`,
+// //       `\n  Flash Loan Fee: ${flashLoanFeeFormatted} ${startToken} (${MAX_FLASH_LOAN_FEE.mul(100)}%)`,
+// //       `\n  Net Profit: ${netProfitFormatted} ${startToken}`,
+// //       `\n  Profitable: ${netProfit.gt(0) ? '✅ YES' : '❌ NO'}`
+// //     );
+
+// //     const dbId = await storeOpportunityInDB(opportunity);
+// //     opportunity.dbId = dbId;
+
+// //     return opportunity;
+// //   } catch (error) {
+// //     logToMain(`Error processing cycle ${cycle.path.join(' -> ')}: ${error.message}`, 'warn');
+// //     return null;
+// //   }
+// // }
+
+
 // async function processCycle(cycle, allPrices) {
 //   try {
 //     const startToken = cycle.path[0];
 //     const startDecimals = getTokenDecimals(startToken);
 
-//     const inputAmountHuman = '5';
-//     const inputAmount = new Decimal(ethers.parseUnits(inputAmountHuman, startDecimals).toString());
+//     // Dynamic input based on USD equivalent
+//     const ethPriceUSD = new Decimal('4146.96');
+//     const startTokenPriceUSD = deriveTokenPriceInUSD(startToken, allPrices);
+//     const inputAmountHuman = INPUT_AMOUNT_USD.div(startTokenPriceUSD);
+//     const inputAmount = new Decimal(ethers.parseUnits(inputAmountHuman.toFixed(startDecimals), startDecimals).toString());
 //     let amount = inputAmount;
 //     const amounts = [amount];
-//     const amountsFormatted = [ethers.formatUnits(amount.toFixed(0), startDecimals)];
+//     const amountsFormatted = [inputAmountHuman.toFixed(startDecimals > 6 ? 6 : startDecimals)];
 //     const stepFees = [];
 //     const stepFeesFormatted = [];
 //     const direction = [];
@@ -3771,8 +3924,8 @@ function findCyclesDFS(currentToken, graph, depth, path, currentRate, visited, c
 //     if (startToken === 'ETH' || startToken === 'WETH') {
 //       gasCost = new Decimal(gasCostWei.toString());
 //     } else {
-//       const ethPriceInUSD = new Decimal('2600');
-//       const tokenPriceInUSD = deriveTokenPriceInUSD(startToken, allPrices);
+//       const ethPriceInUSD = ethPriceUSD;
+//       const tokenPriceInUSD = startTokenPriceUSD;
 //       gasCost = new Decimal(gasCostWei.toString())
 //         .mul(ethPriceInUSD)
 //         .div(tokenPriceInUSD)
@@ -3823,6 +3976,32 @@ function findCyclesDFS(currentToken, graph, depth, path, currentRate, visited, c
 //       amountAFormatted: amountsFormatted[1] || amountsFormatted[0]
 //     };
 
+//     // ✅ VALIDATION: Validate triangular path
+//     const isValidPath = validateTriangularPath(
+//       amounts[1], // step1Output (first intermediate amount)
+//       amounts[amounts.length - 1], // final output
+//       inputAmount,
+//       cycle.path
+//     );
+
+//     if (!isValidPath) {
+//       logger.warn('❌ Rejected invalid triangular path calculation', {
+//         path: cycle.path.join(' -> '),
+//         input: inputAmountHuman.toString(),
+//         amounts: amounts.map(a => a.toString())
+//       });
+//       return null; // Don't save this opportunity
+//     }
+
+//     // ✅ VALIDATION: Use validator to validate opportunity
+//     if (!validator.validateTriangularArbitrage(opportunity)) {
+//       logger.warn('❌ Rejected invalid triangular arbitrage', {
+//         path: cycle.path.join(' -> '),
+//         netProfit: netProfit.toString()
+//       });
+//       return null;
+//     }
+
 //     console.log(
 //       `\n🔺 Triangular Arbitrage Opportunity`,
 //       `\n  Cycle: ${cycle.path.join(' -> ')}`,
@@ -3854,179 +4033,450 @@ function findCyclesDFS(currentToken, graph, depth, path, currentRate, visited, c
 // }
 
 
-async function processCycle(cycle, allPrices) {
-  try {
-    const startToken = cycle.path[0];
-    const startDecimals = getTokenDecimals(startToken);
+// ==================================================================
+// TRIANGULAR ARBITRAGE v3 — REAL QUOTES + DYNAMIC SIMULATION (2025 READY)
+// ==================================================================
+// function buildOptimizedGraph(allPrices) {
+//   const graph = new Map();
+//   const tokenLiquidity = new Map();
+//   const edgeDetails = new Map(); // Store complete edge information
 
-    // Dynamic input based on USD equivalent
-    const ethPriceUSD = new Decimal('4146.96');
-    const startTokenPriceUSD = deriveTokenPriceInUSD(startToken, allPrices);
-    const inputAmountHuman = INPUT_AMOUNT_USD.div(startTokenPriceUSD);
-    const inputAmount = new Decimal(ethers.parseUnits(inputAmountHuman.toFixed(startDecimals), startDecimals).toString());
-    let amount = inputAmount;
-    const amounts = [amount];
-    const amountsFormatted = [inputAmountHuman.toFixed(startDecimals > 6 ? 6 : startDecimals)];
-    const stepFees = [];
-    const stepFeesFormatted = [];
-    const direction = [];
-    let totalFee = new Decimal(0);
+//   // Pre-calculate token liquidity
+//   for (const price of allPrices) {
+//     const liquidity = new Decimal(price.liquidity || 0);
 
-    for (let i = 0; i < cycle.path.length - 1; i++) {
-      const fromToken = cycle.path[i];
-      const toToken = cycle.path[i + 1];
-      const dex = cycle.dexes[i];
-      const poolAddress = cycle.poolAddresses[i];
-      const platformFee = new Decimal(cycle.fees[i]);
-      const toDecimals = getTokenDecimals(toToken);
+//     tokenLiquidity.set(price.tokenA.symbol,
+//       (tokenLiquidity.get(price.tokenA.symbol) || new Decimal(0)).add(liquidity));
+//     tokenLiquidity.set(price.tokenB.symbol,
+//       (tokenLiquidity.get(price.tokenB.symbol) || new Decimal(0)).add(liquidity));
+//   }
 
-      const priceData = allPrices.find(p =>
-        p.poolAddress.toLowerCase() === poolAddress.toLowerCase() &&
-        p.tokenA.symbol === fromToken && p.tokenB.symbol === toToken
-      );
+//   // Filter tokens by liquidity
+//   const liquidTokens = new Set();
+//   for (const [token, liquidity] of tokenLiquidity) {
+//     if (liquidity.gte(MIN_LIQUIDITY)) {
+//       liquidTokens.add(token);
+//     }
+//   }
 
-      if (!priceData) {
-        logToMain(`Skipping cycle step ${fromToken} -> ${toToken} on ${dex}: No price data`, 'warn');
-        return null;
-      }
+//   console.log(`Building graph with ${liquidTokens.size} liquid tokens`);
 
-      const rate = new Decimal(priceData.priceOfAinB);
-      if (!rate.isFinite() || rate.lte(0)) {
-        logToMain(`Skipping cycle step ${fromToken} -> ${toToken} on ${dex}: Invalid rate (${rate})`, 'warn');
-        return null;
-      }
+//   // Build bidirectional graph with proper exchange rates
+//   for (const price of allPrices) {
+//     if (!liquidTokens.has(price.tokenA.symbol) || !liquidTokens.has(price.tokenB.symbol)) {
+//       continue;
+//     }
 
-      const amountBeforeFee = amount.mul(rate);
-      const stepPlatformFee = amountBeforeFee.mul(platformFee);
-      const stepPriorityFee = amountBeforeFee.mul(PRIORITY_FEE);
-      const stepTotalFee = stepPlatformFee.add(stepPriorityFee);
-      amount = amountBeforeFee.minus(stepTotalFee);
-      amounts.push(amount);
-      amountsFormatted.push(ethers.formatUnits(amount.toFixed(0), toDecimals));
-      stepFees.push(stepTotalFee);
-      stepFeesFormatted.push(ethers.formatUnits(stepTotalFee.toFixed(0), toDecimals));
-      totalFee = totalFee.add(stepTotalFee);
-      direction.push(`Step ${i + 1}: ${fromToken} -> ${toToken} on ${dex}`);
+//     // Initialize graph nodes
+//     if (!graph.has(price.tokenA.symbol)) {
+//       graph.set(price.tokenA.symbol, []);
+//     }
+//     if (!graph.has(price.tokenB.symbol)) {
+//       graph.set(price.tokenB.symbol, []);
+//     }
+
+//     const priceOfAinB = new Decimal(price.priceOfAinB);
+//     const priceOfBinA = new Decimal(price.priceOfBinA);
+
+//     if (!priceOfAinB.isFinite() || !priceOfBinA.isFinite() ||
+//       priceOfAinB.lte(0) || priceOfBinA.lte(0)) {
+//       continue;
+//     }
+
+//     // Calculate exchange rates (how much you get for 1 unit)
+//     // If priceOfAinB = 2000 (1 ETH = 2000 USDC), then exchangeRate = 2000 USDC per ETH
+//     const exchangeRateAtoB = priceOfAinB; // A -> B: how much B you get for 1 A
+//     const exchangeRateBtoA = priceOfBinA; // B -> A: how much A you get for 1 B
+
+//     // A -> B edge
+//     const edgeKeyAB = `${price.tokenA.symbol}->${price.tokenB.symbol}-${price.dex}`;
+//     const edgeAB = {
+//       token: price.tokenB.symbol,
+//       dex: price.dex,
+//       rate: exchangeRateAtoB.toNumber(),
+//       poolAddress: price.poolAddress,
+//       fee: new Decimal(price.fee).toNumber(),
+//       liquidity: new Decimal(price.liquidity || 0).toNumber(),
+//       fromToken: price.tokenA.symbol,
+//       toToken: price.tokenB.symbol
+//     };
+
+//     graph.get(price.tokenA.symbol).push(edgeAB);
+//     edgeDetails.set(edgeKeyAB, {
+//       ...price,
+//       exchangeRate: exchangeRateAtoB,
+//       direction: 'AtoB'
+//     });
+
+//     // B -> A edge
+//     const edgeKeyBA = `${price.tokenB.symbol}->${price.tokenA.symbol}-${price.dex}`;
+//     const edgeBA = {
+//       token: price.tokenA.symbol,
+//       dex: price.dex,
+//       rate: exchangeRateBtoA.toNumber(),
+//       poolAddress: price.poolAddress,
+//       fee: new Decimal(price.fee).toNumber(),
+//       liquidity: new Decimal(price.liquidity || 0).toNumber(),
+//       fromToken: price.tokenB.symbol,
+//       toToken: price.tokenA.symbol
+//     };
+
+//     graph.get(price.tokenB.symbol).push(edgeBA);
+//     edgeDetails.set(edgeKeyBA, {
+//       ...price,
+//       exchangeRate: exchangeRateBtoA,
+//       direction: 'BtoA'
+//     });
+//   }
+
+//   // Sort edges by liquidity and limit branching
+//   for (const [token, edges] of graph) {
+//     edges.sort((a, b) => b.liquidity - a.liquidity);
+//     if (edges.length > MAX_BRANCHING) {
+//       graph.set(token, edges.slice(0, MAX_BRANCHING));
+//     }
+//   }
+
+//   console.log(`Graph built with ${graph.size} nodes`);
+//   for (const [token, edges] of graph) {
+//     console.log(`${token}: ${edges.length} edges`);
+//   }
+
+//   return { graph, edgeDetails };
+// }
+
+
+function buildGraphWithFullTokens(allPrices) {
+  console.log('\n🔍 DIAGNOSTIC: Building graph from allPrices...');
+  console.log(`   Input: ${allPrices.length} price entries`);
+  
+  const graph = new Map();
+  const tokenMap = new Map();
+  const liquidityMap = new Map();
+  const pairCount = new Map(); // Track how many pools per pair
+
+  // First pass: collect tokens and liquidity
+  for (const p of allPrices) {
+    if (!p.tokenA || !p.tokenB) {
+      console.log(`   ⚠️  Skipping invalid entry: missing tokens`);
+      continue;
     }
 
-    // Calculate costs
-    const gasCostETH = await calculateGasCost(wsProvider, 350000);
-    const gasCostWei = ethers.parseEther(gasCostETH.toString());
-
-    // Flash loan fee on the initial borrowed amount
-    const flashLoanFee = inputAmount.mul(MAX_FLASH_LOAN_FEE);
-
-    // Convert gas cost to start token terms
-    let gasCost;
-    if (startToken === 'ETH' || startToken === 'WETH') {
-      gasCost = new Decimal(gasCostWei.toString());
-    } else {
-      const ethPriceInUSD = ethPriceUSD;
-      const tokenPriceInUSD = startTokenPriceUSD;
-      gasCost = new Decimal(gasCostWei.toString())
-        .mul(ethPriceInUSD)
-        .div(tokenPriceInUSD)
-        .div(new Decimal(10).pow(18 - startDecimals));
-    }
-
-    const grossProfit = amounts[amounts.length - 1].minus(inputAmount);
-    const totalCosts = gasCost.add(flashLoanFee);
-    const netProfit = grossProfit.minus(totalCosts);
-
-    const totalFeeFormatted = ethers.formatUnits(totalFee.toFixed(0), startDecimals);
-    const gasCostFormatted = ethers.formatUnits(gasCost.toFixed(0), startDecimals);
-    const flashLoanFeeFormatted = ethers.formatUnits(flashLoanFee.toFixed(0), startDecimals);
-    const grossProfitFormatted = ethers.formatUnits(grossProfit.toFixed(0), startDecimals);
-    const netProfitFormatted = ethers.formatUnits(netProfit.toFixed(0), startDecimals);
-
-    const opportunity = {
-      type: 'v3_triangular',
-      cycle: cycle.path.join(' -> '),
-      pair: cycle.path.join('/'),
-      direction,
-      path: cycle.path,
-      dexes: cycle.dexes,
-      fees: stepFees.map(f => f),
-      feesFormatted: stepFeesFormatted,
-      totalFees: totalFee,
-      totalFeesFormatted: totalFeeFormatted,
-      gasEstimation: gasCost,
-      gasEstimationFormatted: gasCostFormatted,
-      flashLoanFee: flashLoanFee, // Add flash loan fee
-      flashLoanFeeFormatted: flashLoanFeeFormatted,
-      profit: netProfit,
-      grossProfit,
-      grossProfitFormatted,
-      netProfitFormatted,
-      isProfitable: netProfit.gt(0),
-      amounts: amounts.map(a => a),
-      amountsFormatted,
-      estimatedRate: amounts[amounts.length - 1].div(inputAmount),
-      amount_in: inputAmount.toString(),
-      amount_out: amounts[amounts.length - 1].toFixed(0),
-      buyDex: cycle.dexes[0],
-      sellDex: cycle.dexes[cycle.dexes.length - 1],
-      buyPrice: amounts[1].div(inputAmount),
-      sellPrice: amounts[amounts.length - 1].div(amounts[amounts.length - 2]),
-      inputFormatted: amountsFormatted[0],
-      outputFormatted: amountsFormatted[amountsFormatted.length - 1],
-      amountAFormatted: amountsFormatted[1] || amountsFormatted[0]
-    };
-
-    // ✅ VALIDATION: Validate triangular path
-    const isValidPath = validateTriangularPath(
-      amounts[1], // step1Output (first intermediate amount)
-      amounts[amounts.length - 1], // final output
-      inputAmount,
-      cycle.path
+    tokenMap.set(p.tokenA.symbol, p.tokenA);
+    tokenMap.set(p.tokenB.symbol, p.tokenB);
+    
+    const liq = new Decimal(p.liquidity || 0);
+    liquidityMap.set(
+      p.tokenA.symbol, 
+      (liquidityMap.get(p.tokenA.symbol) || new Decimal(0)).add(liq)
+    );
+    liquidityMap.set(
+      p.tokenB.symbol, 
+      (liquidityMap.get(p.tokenB.symbol) || new Decimal(0)).add(liq)
     );
 
-    if (!isValidPath) {
-      logger.warn('❌ Rejected invalid triangular path calculation', {
-        path: cycle.path.join(' -> '),
-        input: inputAmountHuman.toString(),
-        amounts: amounts.map(a => a.toString())
-      });
-      return null; // Don't save this opportunity
-    }
-
-    // ✅ VALIDATION: Use validator to validate opportunity
-    if (!validator.validateTriangularArbitrage(opportunity)) {
-      logger.warn('❌ Rejected invalid triangular arbitrage', {
-        path: cycle.path.join(' -> '),
-        netProfit: netProfit.toString()
-      });
-      return null;
-    }
-
-    console.log(
-      `\n🔺 Triangular Arbitrage Opportunity`,
-      `\n  Cycle: ${cycle.path.join(' -> ')}`,
-      `\n  Start: ${amountsFormatted[0]} ${startToken} (${inputAmount} wei)`,
-      ...direction.map((dir, i) =>
-        `\n  ${dir}` +
-        `\n    Amount In: ${amountsFormatted[i]} ${cycle.path[i]}` +
-        `\n    Platform Fee: ${cycle.fees[i].mul(100)}% | Priority Fee: ${PRIORITY_FEE.mul(100)}%` +
-        `\n    Fees: ${stepFeesFormatted[i]} ${cycle.path[i + 1]}` +
-        `\n    Amount Out: ${amountsFormatted[i + 1]} ${cycle.path[i + 1]}`
-      ),
-      `\n  Final Output: ${amountsFormatted[amounts.length - 1]} ${startToken}`,
-      `\n  Gross Profit: ${grossProfitFormatted} ${startToken}`,
-      `\n  Total DEX Fees: ${totalFeeFormatted} ${startToken}`,
-      `\n  Gas Cost: ${gasCostFormatted} ${startToken}`,
-      `\n  Flash Loan Fee: ${flashLoanFeeFormatted} ${startToken} (${MAX_FLASH_LOAN_FEE.mul(100)}%)`,
-      `\n  Net Profit: ${netProfitFormatted} ${startToken}`,
-      `\n  Profitable: ${netProfit.gt(0) ? '✅ YES' : '❌ NO'}`
-    );
-
-    const dbId = await storeOpportunityInDB(opportunity);
-    opportunity.dbId = dbId;
-
-    return opportunity;
-  } catch (error) {
-    logToMain(`Error processing cycle ${cycle.path.join(' -> ')}: ${error.message}`, 'warn');
-    return null;
+    // Track pair count
+    const pairKey = [p.tokenA.symbol, p.tokenB.symbol].sort().join('/');
+    pairCount.set(pairKey, (pairCount.get(pairKey) || 0) + 1);
   }
+
+  console.log(`\n   📊 Found ${tokenMap.size} unique tokens`);
+  console.log(`   📊 Found ${pairCount.size} unique pairs`);
+
+  // Show top liquid tokens
+  const topLiquid = Array.from(liquidityMap.entries())
+    .sort((a, b) => b[1].minus(a[1]).toNumber())
+    .slice(0, 10);
+  console.log('\n   💰 Top 10 liquid tokens:');
+  topLiquid.forEach(([sym, liq], i) => {
+    console.log(`      ${i+1}. ${sym}: $${(liq.toNumber()/1e6).toFixed(2)}M`);
+  });
+
+  // Filter for liquid tokens
+  const liquidTokens = new Set();
+  for (const [symbol, totalLiq] of liquidityMap) {
+    if (totalLiq.gte(MIN_LIQUIDITY)) {
+      liquidTokens.add(symbol);
+    }
+  }
+
+  console.log(`\n   ✅ ${liquidTokens.size} tokens meet min liquidity ($${MIN_LIQUIDITY/1000}k)`);
+
+  // Second pass: build graph edges
+  let edgesCreated = 0;
+  let skippedLowLiq = 0;
+  let skippedBadRate = 0;
+
+  for (const p of allPrices) {
+    if (!p.tokenA || !p.tokenB) continue;
+
+    const a = p.tokenA.symbol;
+    const b = p.tokenB.symbol;
+    
+    // Skip if either token isn't liquid enough
+    if (!liquidTokens.has(a) || !liquidTokens.has(b)) {
+      skippedLowLiq++;
+      continue;
+    }
+
+    const rateAtoB = new Decimal(p.priceOfAinB || 0);
+    const rateBtoA = new Decimal(p.priceOfBinA || 0);
+    
+    if (rateAtoB.lte(0) || rateBtoA.lte(0)) {
+      skippedBadRate++;
+      continue;
+    }
+
+    const fee = new Decimal(p.fee || 0.003);
+    const liquidity = Number(p.liquidity || 0);
+
+    // A → B edge
+    if (!graph.has(a)) graph.set(a, []);
+    graph.get(a).push({
+      fromSymbol: a,
+      toSymbol: b,
+      fromToken: p.tokenA,
+      toToken: p.tokenB,
+      rate: rateAtoB.toNumber(),
+      fee: fee.toNumber(),
+      dex: p.dex,
+      pool: p.poolAddress,
+      liquidity: liquidity
+    });
+    edgesCreated++;
+
+    // B → A edge
+    if (!graph.has(b)) graph.set(b, []);
+    graph.get(b).push({
+      fromSymbol: b,
+      toSymbol: a,
+      fromToken: p.tokenB,
+      toToken: p.tokenA,
+      rate: rateBtoA.toNumber(),
+      fee: fee.toNumber(),
+      dex: p.dex,
+      pool: p.poolAddress,
+      liquidity: liquidity
+    });
+    edgesCreated++;
+  }
+
+  console.log(`\n   📈 Created ${edgesCreated} directed edges`);
+  console.log(`   ⏭️  Skipped ${skippedLowLiq} entries (low liquidity)`);
+  console.log(`   ⏭️  Skipped ${skippedBadRate} entries (bad rates)`);
+
+  // Sort edges by liquidity
+  for (const edges of graph.values()) {
+    edges.sort((a, b) => b.liquidity - a.liquidity);
+    if (edges.length > 20) edges.length = 20;
+  }
+
+  // CRITICAL DIAGNOSTIC: Check connectivity for triangle formation
+  console.log('\n🔍 CONNECTIVITY ANALYSIS:');
+  
+  // Check if WETH has connections to stables
+  const wethEdges = graph.get('WETH') || [];
+  const wethTargets = new Set(wethEdges.map(e => e.toSymbol));
+  console.log(`\n   WETH connects to ${wethTargets.size} tokens:`);
+  console.log(`      ${Array.from(wethTargets).slice(0, 15).join(', ')}`);
+
+  // Check if USDC connects back to tokens
+  const usdcEdges = graph.get('USDC') || [];
+  const usdcTargets = new Set(usdcEdges.map(e => e.toSymbol));
+  console.log(`\n   USDC connects to ${usdcTargets.size} tokens:`);
+  console.log(`      ${Array.from(usdcTargets).slice(0, 15).join(', ')}`);
+
+  // Check for triangle potential
+  console.log('\n   🔺 Checking triangle potential:');
+  
+  // Example: WETH → X → USDC → WETH
+  let potentialTriangles = 0;
+  for (const intermediate of wethTargets) {
+    if (intermediate === 'USDC') continue; // Skip direct connection
+    
+    const interEdges = graph.get(intermediate) || [];
+    const interTargets = new Set(interEdges.map(e => e.toSymbol));
+    
+    if (interTargets.has('USDC') && usdcTargets.has('WETH')) {
+      console.log(`      ✅ Found: WETH → ${intermediate} → USDC → WETH`);
+      potentialTriangles++;
+      if (potentialTriangles >= 5) break; // Show first 5
+    }
+  }
+
+  if (potentialTriangles === 0) {
+    console.log('      ❌ NO TRIANGLES FOUND!');
+    console.log('\n   🚨 PROBLEM IDENTIFIED:');
+    console.log('      Your graph lacks the connections needed for triangles.');
+    console.log('      Common causes:');
+    console.log('      1. Missing pairs in allPrices (e.g., no LINK/USDC)');
+    console.log('      2. Liquidity filtering too aggressive');
+    console.log('      3. Price data structure mismatch');
+  } else {
+    console.log(`\n   ✅ Found ${potentialTriangles}+ potential triangle patterns`);
+  }
+
+  // Show tokens with fewest connections (bottlenecks)
+  const connectionCounts = Array.from(graph.entries())
+    .map(([token, edges]) => ({ token, count: edges.length }))
+    .sort((a, b) => a.count - b.count)
+    .slice(0, 10);
+
+  console.log('\n   ⚠️  Tokens with fewest connections (bottlenecks):');
+  connectionCounts.forEach(({ token, count }) => {
+    console.log(`      ${token}: ${count} edges`);
+  });
+
+  return { graph, tokenMap };
+}
+
+// ==================================================================
+// 2. FIXED DFS with detailed logging
+// ==================================================================
+function dfsFindCyclesRelaxed(current, graph, path, rate, visited, results) {
+  if (path.length > 3) return;
+
+  const outgoing = graph.get(current) || [];
+
+  for (const edge of outgoing) {
+    const next = edge.toSymbol;
+    
+    const feeMultiplier = new Decimal(1).minus(edge.fee);
+    const newRate = rate.mul(edge.rate).mul(feeMultiplier);
+
+    // Completed a 3-hop cycle?
+    if (next === path[0] && path.length === 3) {
+      if (newRate.gte(1.0003)) { // Very relaxed: 0.03%
+        results.push({
+          path: [...path, next],
+          startToken: path[0],
+          estimated: newRate.toNumber()
+        });
+      }
+      continue;
+    }
+
+    // Continue building path
+    if (path.length < 3 && !visited.has(next)) {
+      visited.add(next);
+      dfsFindCyclesRelaxed(next, graph, [...path, next], newRate, visited, results);
+      visited.delete(next);
+    }
+  }
+}
+
+// ==================================================================
+// 3. Main function with enhanced diagnostics
+// ==================================================================
+async function triangularArbitrageOptimized(allPrices) {
+  console.log('\n═══════════════════════════════════════════════════');
+  console.log('🔍 TRIANGULAR ARBITRAGE DIAGNOSTIC MODE v4.2');
+  console.log('═══════════════════════════════════════════════════\n');
+
+  // Build graph with diagnostics
+  const { graph, tokenMap } = buildGraphWithFullTokens(allPrices);
+
+  // If graph is empty, we have a data problem
+  if (graph.size === 0) {
+    console.error('\n❌ CRITICAL ERROR: Graph is empty!');
+    console.error('   Check your allPrices data structure.');
+    console.error('   Expected format:');
+    console.error('   {');
+    console.error('     tokenA: { symbol, address, decimals },');
+    console.error('     tokenB: { symbol, address, decimals },');
+    console.error('     priceOfAinB: number,');
+    console.error('     priceOfBinA: number,');
+    console.error('     liquidity: number,');
+    console.error('     fee: number,');
+    console.error('     dex: string,');
+    console.error('     poolAddress: string');
+    console.error('   }');
+    return [];
+  }
+
+  // Get top tokens to search from
+  const liquidityMap = new Map();
+  for (const p of allPrices) {
+    const liq = new Decimal(p.liquidity || 0);
+    liquidityMap.set(
+      p.tokenA.symbol,
+      (liquidityMap.get(p.tokenA.symbol) || new Decimal(0)).add(liq)
+    );
+    liquidityMap.set(
+      p.tokenB.symbol,
+      (liquidityMap.get(p.tokenB.symbol) || new Decimal(0)).add(liq)
+    );
+  }
+
+  const topTokens = Array.from(liquidityMap.entries())
+    .sort((a, b) => b[1].minus(a[1]).toNumber())
+    .map(([token]) => token)
+    .slice(0, 40);
+
+  console.log(`\n🎯 Starting DFS from top ${topTokens.length} tokens...`);
+  console.log(`   Tokens: ${topTokens.slice(0, 10).join(', ')}...\n`);
+
+  // Find cycles
+  const candidateCycles = [];
+  let tokensScanned = 0;
+
+  for (const startSym of topTokens) {
+    if (!graph.has(startSym)) {
+      console.log(`   ⚠️  ${startSym} not in graph (filtered out)`);
+      continue;
+    }
+
+    const visited = new Set([startSym]);
+    const initialRate = new Decimal(1);
+
+    const beforeCount = candidateCycles.length;
+    dfsFindCyclesRelaxed(
+      startSym,
+      graph,
+      [startSym],
+      initialRate,
+      visited,
+      candidateCycles
+    );
+
+    const foundCount = candidateCycles.length - beforeCount;
+    if (foundCount > 0) {
+      console.log(`   ✅ ${startSym}: Found ${foundCount} cycles`);
+    }
+
+    tokensScanned++;
+    
+    if (candidateCycles.length > 500) {
+      console.log(`   ✅ Found enough cycles (${candidateCycles.length}), stopping search`);
+      break;
+    }
+  }
+
+  console.log(`\n📊 CYCLE SEARCH RESULTS:`);
+  console.log(`   Tokens scanned: ${tokensScanned}`);
+  console.log(`   Candidate cycles found: ${candidateCycles.length}`);
+
+  if (candidateCycles.length === 0) {
+    console.error('\n❌ ZERO CYCLES FOUND!');
+    console.error('\n🔍 DEBUGGING STEPS:');
+    console.error('   1. Verify allPrices contains at least 3-token paths');
+    console.error('   2. Check that pairs like WETH/USDC, LINK/USDC exist');
+    console.error('   3. Ensure liquidity values are > $100k');
+    console.error('   4. Verify priceOfAinB and priceOfBinA are set correctly');
+    console.error('\n   Run this to inspect your data:');
+    console.error('   console.log(JSON.stringify(allPrices[0], null, 2))');
+    return [];
+  }
+
+  // Sort by estimated profit
+  candidateCycles.sort((a, b) => b.estimated - a.estimated);
+
+  console.log(`\n   Top 5 estimated profits:`);
+  candidateCycles.slice(0, 5).forEach((c, i) => {
+    console.log(`      ${i+1}. ${c.path.join(' → ')}: ${((c.estimated - 1) * 100).toFixed(3)}%`);
+  });
+
+  return candidateCycles;
 }
 
 // Helper functions
@@ -4181,14 +4631,14 @@ Min Profit Threshold: ${MIN_PROFIT_THRESHOLD}
 
     // console.log("----------------allPrices", allPrices)
 
-    const [directOpps, triangularOpps] = await Promise.all([
+    const [directOpps,  triangularOpps] = await Promise.all([
 
       directArbitrageOptimized(allPrices),
       // crossArbitrageOptimized(allPrices),
       // triangularArbitrageOptimized(allPrices),
     ]);
 
-    const allOpportunities = [...directOpps];
+    const allOpportunities = [ ...directOpps ];
 
     timer.checkpoint('All analyses completed');
 

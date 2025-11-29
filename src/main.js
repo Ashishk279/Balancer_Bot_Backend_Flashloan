@@ -14,6 +14,16 @@
 
 import "dotenv/config";
 
+import { Worker } from 'worker_threads';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { FlashbotsBundleProvider } from '@flashbots/ethers-provider-bundle';
+import { ethers } from 'ethers';
+
+// Fix __dirname in ESM modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // ==================== PARALLEL PROCESSING IMPORTS ====================
 import { initializeRPCRouter, getRPCRouter } from './provider/smartRPCRouter.js';
 import { initializeGasOracle, getGasOracle } from './utils/gasOracle.js';
@@ -55,6 +65,15 @@ let lastProcessedBlock = 0;
 // Track cooldown period
 let isCooldown = false;
 let lastExecutionTime = null;
+
+// ==================== WORKER THREAD VARIABLES ====================
+let swapEventWorker = null;
+let mempoolWorker = null;
+const workerStats = {
+    swapEventOpportunities: 0,
+    mempoolOpportunities: 0,
+    totalExecuted: 0
+};
 
 /**
  * Initialize all systems with parallel processing
@@ -163,12 +182,271 @@ async function initializeSystems() {
             }, MONITORING_CONFIG.STATS_INTERVAL);
         }
 
+        // Step 10: Start Swap Event & Mempool Workers (if enabled)
+        if (process.env.ENABLE_SWAP_EVENT_WORKER !== 'false') {
+            await startSwapEventWorker();
+        }
+
+        if (process.env.ENABLE_MEMPOOL_WORKER !== 'false') {
+            await startMempoolWorker();
+        }
+
         return true;
 
     } catch (error) {
         console.error('❌ System initialization failed:', error);
         throw error;
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORKER THREAD FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Start Swap Event Listener Worker
+ */
+async function startSwapEventWorker() {
+    console.log('🔄 Starting Swap Event Worker...');
+
+    try {
+        const workerPath = path.join(__dirname, 'workers', 'swapEventWorker.js');
+        swapEventWorker = new Worker(workerPath);
+
+        // Handle messages from worker
+        swapEventWorker.on('message', handleSwapEventWorkerMessage);
+
+        // Handle worker errors
+        swapEventWorker.on('error', (error) => {
+            console.error('❌ Swap Event Worker error:', error);
+        });
+
+        // Handle worker exit
+        swapEventWorker.on('exit', (code) => {
+            if (code !== 0) {
+                console.error(`⚠️  Swap Event Worker stopped with exit code ${code}`);
+            }
+        });
+
+        console.log('✅ Swap Event Worker started successfully');
+    } catch (error) {
+        console.error('❌ Failed to start Swap Event Worker:', error);
+    }
+}
+
+/**
+ * Start Mempool Monitor Worker
+ */
+async function startMempoolWorker() {
+    console.log('🔄 Starting Mempool Worker...');
+
+    try {
+        const workerPath = path.join(__dirname, 'workers', 'mempoolWorker.js');
+        mempoolWorker = new Worker(workerPath);
+
+        // Handle messages from worker
+        mempoolWorker.on('message', handleMempoolWorkerMessage);
+
+        // Handle worker errors
+        mempoolWorker.on('error', (error) => {
+            console.error('❌ Mempool Worker error:', error);
+        });
+
+        // Handle worker exit
+        mempoolWorker.on('exit', (code) => {
+            if (code !== 0) {
+                console.error(`⚠️  Mempool Worker stopped with exit code ${code}`);
+            }
+        });
+
+        console.log('✅ Mempool Worker started successfully');
+    } catch (error) {
+        console.error('❌ Failed to start Mempool Worker:', error);
+    }
+}
+
+/**
+ * Handle messages from Swap Event Worker
+ */
+async function handleSwapEventWorkerMessage(message) {
+    const { type, data } = message;
+
+    console.log(`\n📩 Message from Swap Event Worker: ${message}`);
+
+    switch (type) {
+        case 'WORKER_READY':
+            console.log('✅ Swap Event Worker is ready');
+            break;
+
+        case 'WORKER_ERROR':
+            console.error(`❌ Swap Event Worker error: ${data.error}`);
+            break;
+
+        case 'OPPORTUNITY':
+            workerStats.swapEventOpportunities++;
+            console.log(`\n🎯 Received SWAP EVENT opportunity from worker`);
+            await executeSwapEventOpportunity(data);
+            break;
+
+        default:
+            console.log(`⚠️  Unknown message type from Swap Event Worker: ${type}`);
+    }
+}
+
+/**
+ * Handle messages from Mempool Worker
+ */
+async function handleMempoolWorkerMessage(message) {
+    const { type, data } = message;
+
+    console.log(`\n📩 Message from Mempool Worker: ${message}`);
+
+    switch (type) {
+        case 'WORKER_READY':
+            console.log('✅ Mempool Worker is ready');
+            break;
+
+        case 'WORKER_ERROR':
+            console.error(`❌ Mempool Worker error: ${data.error}`);
+            break;
+
+        case 'MEMPOOL_OPPORTUNITY':
+            workerStats.mempoolOpportunities++;
+            console.log(`\n🎯 Received MEMPOOL opportunity from worker`);
+            await executeMempoolOpportunity(data);
+            break;
+
+        default:
+            console.log(`⚠️  Unknown message type from Mempool Worker: ${type}`);
+    }
+}
+
+/**
+ * Execute Swap Event Arbitrage Opportunity
+ */
+async function executeSwapEventOpportunity(opportunity) {
+    console.log(`\n╔════════════════════════════════════════════════════════════╗`);
+    console.log(`║        EXECUTING SWAP EVENT ARBITRAGE OPPORTUNITY          ║`);
+    console.log(`╚════════════════════════════════════════════════════════════╝`);
+
+    const executionStartTime = Date.now();
+
+    try {
+        // Log opportunity details
+        console.log(`\n📋 OPPORTUNITY DETAILS:`);
+        console.log(`   Type: ${opportunity.type}`);
+        console.log(`   Source Pool: ${opportunity.sourcePool.name} (${opportunity.sourcePool.dex})`);
+        console.log(`   Target Pool: ${opportunity.targetPool.name} (${opportunity.targetPool.dex})`);
+        console.log(`   Buy Price:  ${opportunity.targetPool.price?.toFixed(6)}`);
+        console.log(`   Sell Price: ${opportunity.sourcePool.price?.toFixed(6)}`);
+        console.log(`   Spread:     ${opportunity.spread?.toFixed(4)}%`);
+        console.log(`   Net Spread: ${opportunity.netSpread?.toFixed(4)}%`);
+        console.log(`   Swap Value: $${opportunity.swapDetails.valueUSD?.toLocaleString()}`);
+
+        // Convert to execution format compatible with existing system
+        const execOpportunity = {
+            id: `swap_event_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            type: 'swap_event_arb',
+            timestamp: opportunity.timestamp,
+            estimated_profit: opportunity.netSpread,
+            buyDex: opportunity.targetPool.dex,
+            sellDex: opportunity.sourcePool.dex,
+            buyPool: opportunity.targetPool.address,
+            sellPool: opportunity.sourcePool.address,
+            token0: opportunity.tokens.token0,
+            token1: opportunity.tokens.token1,
+            spread: opportunity.spread,
+            blockNumber: opportunity.blockNumber
+        };
+
+        // Execute using existing execution layer
+        console.log(`\n🎯 Attempting execution...`);
+        const result = await executeFlashLoanTransaction(execOpportunity, wsProvider);
+
+        const totalTime = Date.now() - executionStartTime;
+
+        console.log(`\n📊 EXECUTION RESULT (${totalTime}ms):`);
+
+        if (result.success) {
+            workerStats.totalExecuted++;
+            console.log(`\n✅ ✅ ✅ EXECUTION SUCCESSFUL! ✅ ✅ ✅`);
+            console.log(`   TX Hash: ${result.txHash}`);
+            console.log(`   Gas Used: ${result.gasUsed}`);
+            console.log(`   Total Time: ${totalTime}ms`);
+        } else {
+            console.log(`\n❌ ❌ ❌ EXECUTION FAILED! ❌ ❌ ❌`);
+            console.log(`   Error: ${result.error}`);
+            console.log(`   Total Time: ${totalTime}ms`);
+        }
+
+    } catch (error) {
+        const totalTime = Date.now() - executionStartTime;
+        console.log(`\n❌ EXECUTION ERROR: ${error.message}`);
+        console.log(`   Total Time: ${totalTime}ms`);
+    }
+
+    console.log(`\n╚════════════════════════════════════════════════════════════╝\n`);
+}
+
+/**
+ * Execute Mempool Backrun Opportunity
+ */
+async function executeMempoolOpportunity(opportunity) {
+    console.log(`\n╔════════════════════════════════════════════════════════════╗`);
+    console.log(`║         EXECUTING MEMPOOL BACKRUN OPPORTUNITY              ║`);
+    console.log(`╚════════════════════════════════════════════════════════════╝`);
+
+    const executionStartTime = Date.now();
+
+    try {
+        // Log opportunity details
+        console.log(`\n📋 OPPORTUNITY DETAILS:`);
+        console.log(`   TxHash:       ${opportunity.txHash}`);
+        console.log(`   Router:       ${opportunity.router}`);
+        console.log(`   Swap Type:    ${opportunity.swap.type}`);
+        console.log(`   Value:        $${opportunity.swap.valueUSD?.toLocaleString()}`);
+        console.log(`   Price Impact: ${opportunity.priceImpact?.toFixed(4)}%`);
+        console.log(`   Token In:     ${opportunity.swap.tokenIn}`);
+        console.log(`   Token Out:    ${opportunity.swap.tokenOut}`);
+
+        // For mempool opportunities, we would typically:
+        // 1. Create a Flashbots bundle with the victim tx + our backrun tx
+        // 2. Simulate the bundle
+        // 3. Submit to Flashbots
+
+        console.log(`\n🔧 Creating Flashbots bundle...`);
+
+        // Convert to execution format
+        const execOpportunity = {
+            id: `mempool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            type: 'mempool_backrun',
+            timestamp: opportunity.timestamp,
+            estimated_profit: opportunity.priceImpact,
+            victimTxHash: opportunity.txHash,
+            router: opportunity.router,
+            swap: opportunity.swap,
+            priceImpact: opportunity.priceImpact
+        };
+
+        // In production, this would create and submit a Flashbots bundle
+        // For now, we'll log that we would execute it
+        console.log(`\n⚠️  SIMULATION MODE - Would submit Flashbots bundle:`);
+        console.log(`   Bundle: [Victim TX, Our Backrun TX]`);
+        console.log(`   Target Block: ${opportunity.blockNumber || 'next'}`);
+        console.log(`   Expected Profit: ${opportunity.priceImpact?.toFixed(4)}%`);
+
+        workerStats.totalExecuted++;
+
+        const totalTime = Date.now() - executionStartTime;
+        console.log(`\n   Total Time: ${totalTime}ms`);
+
+    } catch (error) {
+        const totalTime = Date.now() - executionStartTime;
+        console.log(`\n❌ EXECUTION ERROR: ${error.message}`);
+        console.log(`   Total Time: ${totalTime}ms`);
+    }
+
+    console.log(`\n╚════════════════════════════════════════════════════════════╝\n`);
 }
 
 /**
@@ -435,6 +713,23 @@ function setupGracefulShutdown() {
         console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
 
         try {
+            // Stop workers
+            if (swapEventWorker) {
+                console.log('Terminating Swap Event Worker...');
+                await swapEventWorker.terminate();
+            }
+
+            if (mempoolWorker) {
+                console.log('Terminating Mempool Worker...');
+                await mempoolWorker.terminate();
+            }
+
+            // Log worker statistics
+            console.log('\n📊 WORKER STATISTICS:');
+            console.log(`   Swap Event Opportunities: ${workerStats.swapEventOpportunities}`);
+            console.log(`   Mempool Opportunities:    ${workerStats.mempoolOpportunities}`);
+            console.log(`   Total Executed:           ${workerStats.totalExecuted}`);
+
             // Stop execution manager
             if (executionManager) {
                 console.log('Stopping execution manager...');
